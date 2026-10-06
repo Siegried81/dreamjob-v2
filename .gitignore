@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Secrets & local config
+.env
+.env.local
+*.pem
+credentials.json
+token.json
+
+# Runtime data (private job-seeker data, raw documents, generated packages).
+# Anchored: an unanchored ``data/`` also swallowed ``backend/dreamjob/pipeline/data``,
+# which is packaged application data (pyproject ``package-data``) that the code
+# reads at import - the skills taxonomy, the board registry, the agency name
+# lexicon - so a fresh clone had none of it.
+/data/
+!/data/.gitkeep
+*.db
+*.db-wal
+*.db-shm
+
+# Browser automation profile
+.chrome-profile/
+
+# OS
+.DS_Store
+
+# Runtime logs (NFR-701).  ``logs/*`` rather than ``logs/``: git cannot
+# re-include a file whose parent directory is itself excluded, and the
+# directory has to survive a fresh clone so setup_logging() has somewhere to
+# write before it has written anything.
+logs/*
+!logs/.gitkeep
+
+# Kilo / Agent Manager local state (never committed)
+.kilo/
+
+# Local Playwright capture artifacts: state.json holds a live session cookie
+# and capture*.py holds the login password. Never commit them.
+docs/v2_build/state.json
+docs/v2_build/capture*.py
+
+# Archives of the data directory. `/data/` is anchored on purpose (packaged
+# pipeline data under backend/ must stay tracked), but that left a zip OF that
+# directory matching nothing: data.zip was 1.4 GiB of the live database, dated
+# backups, uploads and generated CVs of real people, one `git add -A` from a
+# public commit. Found 2026-10-06.
+*.zip
+!backend/dreamjob/pipeline/data/*.zip
+# Session transcripts and scratch artefacts.
+claude_*.txt
+*transcript*.txt
+*.bak
+*.part
+*.orig
+
+# Walkthrough video: the rendered film and the rushes it is cut from. ~190 MB of
+# build artefacts of docs/v2_build/build_video.py, which the application never
+# reads - the UI references none of them. They live on the author's machine; the
+# script regenerates them from docs/v2_build/ when a new cut is needed.
+Dream_Job_Walkthrough_and_Architecture_v2.mp4
+docs/v2_build/beats/
+docs/v2_build/tour/
+docs/v2_build/video/
+
+# A named person's real CV and LinkedIn export. They were tracked upstream and
+# travelled with the snapshot. Third-party personal data does not belong in a
+# repository; the pair lives outside the tree and is loaded at runtime like any
+# other profile.
+docs/CV*.docx
+docs/Profile.pdf

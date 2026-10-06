@@ -1,0 +1,450 @@
+{
+  "schema": "dreamjob.e2e.persona/1",
+  "generated_at": "2026-09-09",
+  "as_of": "2026-09",
+  "requirements": [
+    "FR-102",
+    "FR-103",
+    "FR-109",
+    "FR-364"
+  ],
+  "notice": "Entirely fictional test data generated for the Dream Job end-to-end test. The person, the employers, the publications and the projects do not exist; the address is in the RFC 2606 reserved domain.",
+  "identity": {
+    "first_name": "Thibault",
+    "last_name": "Casteleyn",
+    "city": "Ghent",
+    "region": "East Flanders",
+    "country": "Belgium",
+    "headline": "Senior Software Engineer · Event-driven systems · Go & Kubernetes",
+    "name": "Thibault Casteleyn",
+    "email": "thibault.casteleyn@example.com",
+    "phone": "+32 427 49 54 44",
+    "linkedin_url": "www.linkedin.com/in/thibaultcasteleyn",
+    "website": "thibaultcasteleyn.example.com",
+    "location_full": "Ghent, East Flanders, Belgium",
+    "location_short": "Ghent, Belgium"
+  },
+  "summary": "Software engineer with more than a decade in the Benelux tech scene, from first-line support to owning backend platforms for connected hardware and open-source developer tools. I care about clean boundaries in code and in teams, and I have a track record of making event-driven systems observable, affordable, and easy to reason about. Currently a senior software engineer at Dovane, building Go services that run on Kubernetes in multiple clouds.",
+  "experience": [
+    {
+      "employer": "Dovane",
+      "title": "Senior Software Engineer",
+      "location": "Ghent, Belgium",
+      "start": "2024-07",
+      "end": null,
+      "current": true,
+      "summary": "Directing backend architecture of an open-source developer platform, emphasizing event-driven patterns and cloud-native operations.",
+      "achievements": [
+        "Redesigned core APIs serving 25,000+ weekly active developers.",
+        "Migrated from a monolith to 12 event-aligned microservices with an outbox pattern.",
+        "Lowered p95 API latency by 60% through PostgreSQL query tuning and caching."
+      ],
+      "technologies": [
+        "Go",
+        "TypeScript",
+        "React",
+        "GraphQL",
+        "PostgreSQL",
+        "Kafka",
+        "Docker",
+        "Kubernetes",
+        "Terraform",
+        "AWS",
+        "CI/CD",
+        "Technical Leadership",
+        "Observability",
+        "Performance Engineering",
+        "Open Source Development",
+        "REST API"
+      ],
+      "employer_cv": "Dovane",
+      "cv_end": null,
+      "employer_total_duration": null,
+      "linkedin_dates": "July 2024 - Present (2 years 3 months)",
+      "cv_dates": "July 2024 – Present"
+    },
+    {
+      "employer": "Cyrel",
+      "title": "Backend Engineer",
+      "location": "Brussels, Belgium",
+      "start": "2021-08",
+      "end": "2024-06",
+      "current": false,
+      "summary": "Designed event-driven microservices for industrial IoT telemetry at a company digital division.",
+      "achievements": [
+        "Created a Kafka ingestion pipeline handling 1.2M messages per minute with at-least-once delivery.",
+        "Reduced cloud spend by 32% by optimizing Kubernetes workloads and using spot capacity.",
+        "Mentored two engineers to senior positions, establishing an internal architecture review group."
+      ],
+      "technologies": [
+        "Java",
+        "Spring Boot",
+        "Kotlin",
+        "Kafka",
+        "Redis",
+        "Microservices",
+        "Domain-Driven Design",
+        "Event-Driven Architecture",
+        "CQRS",
+        "Docker",
+        "Kubernetes",
+        "Terraform",
+        "AWS",
+        "Technical Leadership",
+        "Mentoring"
+      ],
+      "employer_cv": "Cyrel NV",
+      "cv_end": "2024-06",
+      "employer_total_duration": null,
+      "linkedin_dates": "August 2021 - June 2024 (2 years 11 months)",
+      "cv_dates": "August 2021 – June 2024"
+    },
+    {
+      "employer": "Braveng",
+      "title": "Full Stack Developer",
+      "location": "Antwerp, Belgium",
+      "start": "2019-11",
+      "end": "2021-07",
+      "current": false,
+      "summary": "Built a real-time logistics dashboard and API across the full stack with React, Node.js, and GraphQL.",
+      "achievements": [
+        "Delivered a dashboard adopted by 300+ dispatchers in less than 8 months.",
+        "Reduced average GraphQL payload size by 40%, improving mobile loading times.",
+        "Set up Playwright end-to-end tests, catching 35% more regressions before production."
+      ],
+      "technologies": [
+        "TypeScript",
+        "JavaScript",
+        "React",
+        "Node.js",
+        "Express",
+        "PostgreSQL",
+        "MongoDB",
+        "GraphQL",
+        "Jest",
+        "Playwright",
+        "Docker",
+        "Kubernetes",
+        "Terraform",
+        "AWS",
+        "CI/CD",
+        "Pair Programming"
+      ],
+      "employer_cv": "Braveng",
+      "cv_end": "2021-07",
+      "employer_total_duration": null,
+      "linkedin_dates": "November 2019 - July 2021 (1 year 9 months)",
+      "cv_dates": "November 2019 – July 2021"
+    },
+    {
+      "employer": "Atelicos",
+      "title": "Software Engineer",
+      "location": "Ghent, Belgium",
+      "start": "2017-09",
+      "end": "2019-10",
+      "current": false,
+      "summary": "Owned backend services in a Ruby on Rails monolith and helped modernize the frontend with TypeScript.",
+      "achievements": [
+        "Refactored 5 legacy modules into isolated services while maintaining 99.9% uptime.",
+        "Cut release pipeline time by 70% by introducing Docker Compose and CI parallelization.",
+        "Improved test coverage from 23% to 68% by pairing and promoting test-first practices."
+      ],
+      "technologies": [
+        "Ruby",
+        "Rails",
+        "TypeScript",
+        "JavaScript",
+        "PostgreSQL",
+        "Redis",
+        "Docker",
+        "Git",
+        "REST API",
+        "CI/CD",
+        "Test-Driven Development",
+        "Agile Development",
+        "Code Review",
+        "Scrum"
+      ],
+      "employer_cv": "Atelicos",
+      "cv_end": "2019-10",
+      "employer_total_duration": "4 years 2 months",
+      "linkedin_dates": "September 2017 - October 2019 (2 years 2 months)",
+      "cv_dates": "September 2017 – October 2019"
+    },
+    {
+      "employer": "Atelicos",
+      "title": "Technical Support Engineer",
+      "location": "Ghent, Belgium",
+      "start": "2015-09",
+      "end": "2017-08",
+      "current": false,
+      "summary": "Acted as the primary technical contact for enterprise customers, solving complex issues and translating user feedback into engineering tickets.",
+      "achievements": [
+        "Reduced median ticket resolution time from 8 hours to 2.5 hours by introducing a shared debugging playbook.",
+        "Compiled SQL reports for 40+ enterprise accounts, leading to a 20% drop in billing query volume.",
+        "Logged and reproduced 130+ customer-reported bugs, 4 of which became high-severity fixes."
+      ],
+      "technologies": [
+        "SQL",
+        "PostgreSQL",
+        "JavaScript",
+        "HTML",
+        "CSS",
+        "Bash",
+        "Linux",
+        "REST API",
+        "Customer Support",
+        "Incident Management",
+        "Ticketing Systems"
+      ],
+      "employer_cv": "Atelicos",
+      "cv_end": "2017-05",
+      "employer_total_duration": null,
+      "linkedin_dates": "September 2015 - August 2017 (2 years)",
+      "cv_dates": "September 2015 – May 2017"
+    }
+  ],
+  "experience_order": "reverse_chronological",
+  "education": [
+    {
+      "school": "Soderberg University College",
+      "degree": "Professional Bachelor in Information Technology",
+      "field": "Applied Computer Science",
+      "location": "Ghent, Belgium",
+      "start_year": 2012,
+      "end_year": 2015,
+      "linkedin_detail": "Professional Bachelor in Information Technology, Applied Computer Science · (2012 - 2015)",
+      "cv_dates": "2012 – 2015"
+    }
+  ],
+  "certifications": [
+    {
+      "title": "Kubernetes Application Developer Certification",
+      "issuer": "Open Cloud Institute",
+      "year": 2020
+    },
+    {
+      "title": "Professional Go Programming Certification",
+      "issuer": "Arcadia Training",
+      "year": 2023
+    },
+    {
+      "title": "Certified Event-Driven Architect",
+      "issuer": "Benelux Open Academy",
+      "year": 2022
+    }
+  ],
+  "languages": [
+    {
+      "language": "Dutch",
+      "proficiency": "Native"
+    },
+    {
+      "language": "English",
+      "proficiency": "Full Professional"
+    },
+    {
+      "language": "French",
+      "proficiency": "Professional Working"
+    }
+  ],
+  "skills": [
+    "Go",
+    "TypeScript",
+    "JavaScript",
+    "Node.js",
+    "SQL",
+    "React",
+    "Express",
+    "PostgreSQL",
+    "MongoDB",
+    "Redis",
+    "Kafka",
+    "Docker",
+    "Kubernetes",
+    "Terraform",
+    "AWS",
+    "Linux",
+    "Microservices",
+    "Event-Driven Architecture",
+    "Domain-Driven Design",
+    "REST API",
+    "GraphQL",
+    "CI/CD",
+    "Test-Driven Development",
+    "Agile Development",
+    "Code Review",
+    "Technical Leadership",
+    "Mentoring"
+  ],
+  "skill_groups": [
+    {
+      "label": "Languages & Runtimes",
+      "skills": [
+        "Go",
+        "TypeScript",
+        "JavaScript",
+        "Node.js",
+        "SQL"
+      ]
+    },
+    {
+      "label": "Frameworks & Libraries",
+      "skills": [
+        "React",
+        "Express"
+      ]
+    },
+    {
+      "label": "Data Stores & Streaming",
+      "skills": [
+        "PostgreSQL",
+        "MongoDB",
+        "Redis",
+        "Kafka"
+      ]
+    },
+    {
+      "label": "Cloud & Infrastructure",
+      "skills": [
+        "Docker",
+        "Kubernetes",
+        "Terraform",
+        "AWS",
+        "Linux"
+      ]
+    },
+    {
+      "label": "Architecture & Integration",
+      "skills": [
+        "Microservices",
+        "Event-Driven Architecture",
+        "Domain-Driven Design",
+        "REST API",
+        "GraphQL"
+      ]
+    },
+    {
+      "label": "Engineering Practices & Leadership",
+      "skills": [
+        "CI/CD",
+        "Test-Driven Development",
+        "Agile Development",
+        "Code Review",
+        "Technical Leadership",
+        "Mentoring"
+      ]
+    }
+  ],
+  "top_skills": [
+    "Go",
+    "Kubernetes",
+    "Event-Driven Architecture",
+    "PostgreSQL",
+    "Technical Leadership"
+  ],
+  "publications": [
+    {
+      "title": "Event Sourcing in Go: Lessons from an Industrial Telemetry Platform",
+      "venue": "North Sea Software Conference",
+      "year": 2023,
+      "kind": "talk"
+    },
+    {
+      "title": "Practical DDD for Connected-Hardware Systems",
+      "venue": "Benelux Architecture Forum",
+      "year": 2022,
+      "kind": "talk"
+    },
+    {
+      "title": "Cutting Cloud Waste with Kubernetes and Terraform",
+      "venue": "Schelde DevOps Days",
+      "year": 2021,
+      "kind": "talk"
+    }
+  ],
+  "projects": [
+    {
+      "name": "Eventkit",
+      "url": "https://example.com/eventkit",
+      "description": "A lightweight Go library for building event-driven services with outbox pattern support.",
+      "technologies": [
+        "Go",
+        "PostgreSQL",
+        "Kafka"
+      ]
+    },
+    {
+      "name": "Skylark",
+      "url": "https://example.com/skylark",
+      "description": "A React and TypeScript toolkit for building observable dashboards on Kubernetes.",
+      "technologies": [
+        "TypeScript",
+        "React",
+        "Kubernetes"
+      ]
+    }
+  ],
+  "dream_job": {
+    "statement": "My next role is the one where I get to focus on the hard parts of event-driven systems: designing and running reliable data pipelines, building the tooling and APIs that other engineers depend on, and making Kafka and Kubernetes behave at scale. Day to day, that looks like sketching the topology for a new flow, sitting in front of my own logs and Grafana dashboards, maybe pairing with a backend engineer on a nasty concurrency bug, and then writing the small, brave Go service that holds the whole thing together. I want to work in a product company with a pragmatic cloud-native culture, where streaming is the default and batch is the exception. The team should be small but senior, with enough ownership to take services to production without a rewrite every quarter. I need to collaborate with platform engineers and SREs, not just be handed a ticket. What I want to stop doing: front-end work, chasing flaky CI, and being the last line of defense for production incidents that could have been prevented by better design. I won't take a role where I'm expected to write React or fix CSS. No more babysitting flaky CI pipelines whose failures we never investigate. And I need a team that owns its incidents end-to-end, not one that just pages me in the middle of the night.",
+    "deal_breakers": [
+      {
+        "constraint": "No front-end work (writing React/CSS)",
+        "quote": "I won't take a role where I'm expected to write React or fix CSS.",
+        "hard": true
+      },
+      {
+        "constraint": "No unowned flaky CI",
+        "quote": "No more babysitting flaky CI pipelines whose failures we never investigate.",
+        "hard": true
+      },
+      {
+        "constraint": "Must own incidents end-to-end, not just be paged",
+        "quote": "I need a team that owns its incidents end-to-end, not one that just pages me in the middle of the night.",
+        "hard": true
+      }
+    ],
+    "target_roles": [
+      "Staff Backend Engineer",
+      "Principal Engineer (Event-Driven Systems)",
+      "Platform Architect"
+    ],
+    "must_haves": [
+      "Go",
+      "Kubernetes",
+      "Kafka or similar streaming infrastructure",
+      "Small senior team with high ownership",
+      "Cloud-native, event-driven architecture as core",
+      "Hands-on technical leadership",
+      "No front-end responsibilities"
+    ]
+  },
+  "planted_conflicts": [
+    {
+      "kind": "employer",
+      "requirement": "FR-103",
+      "expected_field_path": "experience.1.company",
+      "role_index": 1,
+      "anchor": {
+        "employer": "Cyrel",
+        "title": "Backend Engineer"
+      },
+      "value_linkedin": "Cyrel",
+      "value_cv": "Cyrel NV",
+      "why": "The CV states the legal entity, the export states the brand. The merge still pairs the role because company_variants strips the legal form, so the disagreement is reported rather than read as two separate jobs."
+    },
+    {
+      "kind": "date",
+      "requirement": "FR-103",
+      "expected_field_path": "experience.4.end",
+      "role_index": 4,
+      "anchor": {
+        "employer": "Atelicos",
+        "title": "Technical Support Engineer"
+      },
+      "value_linkedin": "2017-08",
+      "value_cv": "2017-05",
+      "why": "The CV ends the role three months before the export does - the ordinary drift of a CV rewritten from memory. Both readings are month-precise, so _same_date reports a real disagreement rather than a rounding gap."
+    }
+  ]
+}
