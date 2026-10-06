@@ -192,7 +192,7 @@ file itself relies on disk encryption.
 **Requirements:** Python 3.11+, Node 18+, and a DeepSeek API key.
 
 ```bash
-git clone <this repo> && cd dreamjob
+git clone https://github.com/Siegried81/dreamjob-v2.git && cd dreamjob-v2
 
 cp .env.example .env
 python3 -m dreamjob.security.crypto --generate-key   # paste both values into .env
