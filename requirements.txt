@@ -41,3 +41,9 @@ email-validator>=2.1
 pytest>=8.2
 pytest-asyncio>=0.23
 ruff>=0.4
+
+# zoneinfo reads the system time-zone database, and Windows has none: without
+# this package ZoneInfo("Europe/Brussels") raises ZoneInfoNotFoundError, which
+# took 50 tests down on a fresh Windows clone (mail dispatch windows, post-app
+# monitoring, the apply browser). The old clone had it only transitively.
+tzdata>=2024.1

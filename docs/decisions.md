@@ -39,3 +39,15 @@ That route is the lawful alternative the rule exists to push towards.
 the point - the decision becomes visible and attributable. Deleting the adapter
 instead would also be defensible; it was not chosen because it discards work
 whose legal reading has not actually been settled.
+
+## 2026-10-11 — a fresh Windows clone failed 50 tests for want of a time-zone database
+
+`requirements.txt` never named `tzdata`. On Linux `zoneinfo` reads the system
+database; Windows has none, so `ZoneInfo("Europe/Brussels")` and even
+`ZoneInfo("UTC")` raised `ZoneInfoNotFoundError` in every test touching a send
+window, a relative date or the apply browser: 50 failures, 2,120 passed, on a
+venv built from the requirements alone. The older clone passed because another
+package had pulled `tzdata` in transitively. Declared explicitly; the four
+modules go from 50 failures to 128 passed. Same fix as the fixtures attribute
+committed earlier today: the repository must be true on the machine it is
+cloned to, not only on the one it was written on.
