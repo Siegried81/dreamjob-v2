@@ -166,15 +166,31 @@ class FakeIMAP:
         return ("OK", [b"AUTH completed"])
 
     # -- folders ----------------------------------------------------------
+    @staticmethod
+    def _mailbox(arg: str) -> str | None:
+        """The one mailbox a server reads from imaplib's verbatim argument.
+
+        imaplib sends the argument as-is, so an unquoted name with a space is
+        two arguments to a real server: ``None`` stands for that BAD command.
+        """
+        if len(arg) >= 2 and arg[0] == arg[-1] == '"':
+            return arg[1:-1]
+        return None if " " in arg else arg
+
     def select(self, folder: str = "INBOX", readonly: bool = False):
-        if folder not in FakeIMAP.folders:
+        self.selected_arg = folder
+        name = self._mailbox(folder)
+        if name is None:
+            return ("BAD", [b"Command Argument Error. 11"])
+        if name not in FakeIMAP.folders:
             return ("NO", [b"no such mailbox"])
-        self.selected = folder
+        self.selected = name
         self.readonly = readonly
         return ("OK", [str(len(FakeIMAP.messages)).encode()])
 
     def status(self, folder: str, what: str):
-        return ("OK", [f'"{folder}" (UIDVALIDITY {FakeIMAP.uid_validity})'.encode()])
+        name = self._mailbox(folder)
+        return ("OK", [f'"{name}" (UIDVALIDITY {FakeIMAP.uid_validity})'.encode()])
 
     # -- reading ----------------------------------------------------------
     def uid(self, command: str, *args):
@@ -755,37 +771,68 @@ def _assert_verifying(context) -> None:
     assert context.minimum_version >= ssl.TLSVersion.TLSv1_2
 
 
-def test_the_imap_probe_passes_a_verifying_context(monkeypatch):
+class _StopAtTls(Exception):
+    """Raised where the TLS handshake would start: far enough to see everything."""
+
+
+class _RecordingContext:
+    """The real verifying context, recording what it was asked to wrap."""
+
+    def __init__(self):
+        from dreamjob.mail.tls import verified_context
+
+        self.real = verified_context()
+        self.server_hostnames: list[str | None] = []
+
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+
+    def wrap_socket(self, sock, server_hostname=None, **kwargs):
+        self.server_hostnames.append(server_hostname)
+        raise _StopAtTls
+
+
+@pytest.fixture
+def no_socket(monkeypatch):
+    """Record where a socket would have been opened, and hand back a dummy one."""
+    import socket
+
+    opened: list[tuple] = []
+
+    def fake_create_connection(address, timeout=None, *args, **kwargs):
+        opened.append((address, timeout))
+        return object()
+
+    monkeypatch.setattr(socket, "create_connection", fake_create_connection)
+    return opened
+
+
+@pytest.fixture
+def recording_context(monkeypatch):
+    from dreamjob.mail import imap_basic
+
+    context = _RecordingContext()
+    monkeypatch.setattr(imap_basic, "verified_context", lambda: context)
+    return context
+
+
+def test_the_imap_probe_passes_a_verifying_context(no_socket, recording_context):
     """imaplib's own default verifies nothing; the backend must not rely on it."""
-    from dreamjob.mail import imap_basic
+    with pytest.raises(_StopAtTls):
+        REAL_CLIENTS["imap"]("imap.mail.yahoo.com", 993, timeout=5.0)
 
-    seen: dict = {}
-
-    def fake_imap4_ssl(host, port, *, ssl_context=None, timeout=None):
-        seen.update(context=ssl_context, timeout=timeout)
-        return "client"
-
-    monkeypatch.setattr(imap_basic.imaplib, "IMAP4_SSL", fake_imap4_ssl)
-    REAL_CLIENTS["imap"]("imap.mail.yahoo.com", 993, timeout=5.0)
-
-    _assert_verifying(seen["context"])
-    assert seen["timeout"] == 5.0
+    _assert_verifying(recording_context)
+    assert recording_context.server_hostnames == ["imap.mail.yahoo.com"]
+    assert no_socket == [((PUBLIC_IP, 993), 5.0)]
 
 
-def test_smtp_on_465_passes_a_verifying_context(monkeypatch):
-    from dreamjob.mail import imap_basic
+def test_smtp_on_465_passes_a_verifying_context(no_socket, recording_context):
+    with pytest.raises(_StopAtTls):
+        REAL_CLIENTS["smtp"]("smtp.mail.yahoo.com", 465, timeout=5.0)
 
-    seen: dict = {}
-
-    def fake_smtp_ssl(host, port, *, context=None, timeout=None):
-        seen.update(context=context, timeout=timeout)
-        return "client"
-
-    monkeypatch.setattr(imap_basic.smtplib, "SMTP_SSL", fake_smtp_ssl)
-    REAL_CLIENTS["smtp"]("smtp.mail.yahoo.com", 465, timeout=5.0)
-
-    _assert_verifying(seen["context"])
-    assert seen["timeout"] == 5.0
+    _assert_verifying(recording_context)
+    assert recording_context.server_hostnames == ["smtp.mail.yahoo.com"]
+    assert no_socket == [((PUBLIC_IP, 465), 5.0)]
 
 
 def test_smtp_on_587_upgrades_with_starttls_on_a_verifying_context(monkeypatch):
@@ -794,8 +841,8 @@ def test_smtp_on_587_upgrades_with_starttls_on_a_verifying_context(monkeypatch):
     calls: list = []
 
     class FakePlainSMTP:
-        def __init__(self, host, port, timeout=None):
-            calls.append(("connect", host, port, timeout))
+        def __init__(self, host, port, *, address, timeout=None):
+            calls.append(("connect", host, port, address, timeout))
 
         def ehlo(self):
             calls.append(("ehlo",))
@@ -806,9 +853,10 @@ def test_smtp_on_587_upgrades_with_starttls_on_a_verifying_context(monkeypatch):
         def close(self):
             calls.append(("close",))
 
-    monkeypatch.setattr(imap_basic.smtplib, "SMTP", FakePlainSMTP)
+    monkeypatch.setattr(imap_basic, "_PinnedSMTP", FakePlainSMTP)
     REAL_CLIENTS["smtp"]("smtp.mail.me.com", 587, timeout=5.0)
 
+    assert calls[0] == ("connect", "smtp.mail.me.com", 587, PUBLIC_IP, 5.0)
     starttls = [c for c in calls if c[0] == "starttls"]
     assert len(starttls) == 1
     _assert_verifying(starttls[0][1])
@@ -822,7 +870,7 @@ def test_smtp_on_587_without_starttls_does_not_continue_in_plaintext(monkeypatch
     closed: list = []
 
     class NoTlsSMTP:
-        def __init__(self, host, port, timeout=None):
+        def __init__(self, host, port, *, address, timeout=None):
             pass
 
         def ehlo(self):
@@ -834,21 +882,27 @@ def test_smtp_on_587_without_starttls_does_not_continue_in_plaintext(monkeypatch
         def close(self):
             closed.append(True)
 
-    monkeypatch.setattr(imap_basic.smtplib, "SMTP", NoTlsSMTP)
+    monkeypatch.setattr(imap_basic, "_PinnedSMTP", NoTlsSMTP)
     with pytest.raises(smtplib.SMTPNotSupportedError):
         REAL_CLIENTS["smtp"]("smtp.example.test", 587, timeout=5.0)
     assert closed == [True]
 
 
-def test_the_poll_session_verifies_tls_and_has_a_timeout(connected: dict):
+def test_the_poll_session_is_the_pinned_client_with_a_timeout(monkeypatch, connected: dict):
+    """The poller opens this mailbox through ``_imap_client`` (pinned, verifying).
+
+    Building ``IMAP4_SSL`` from the host name would resolve it again after the
+    check; the by-name constructor is made to fail so that path cannot pass.
+    """
     from dreamjob.mail import inbox
 
-    FakeIMAP.messages = {7: _raw_message(subject="hi", from_address="recruiter@acme.test")}
-    inbox.poll_account(connected)
+    def by_name(*args, **kwargs):
+        raise AssertionError("the poll connected by name, not to the checked address")
 
-    client = FakeIMAP.instances[-1]
-    _assert_verifying(client.ssl_context)
-    assert client.timeout == inbox.POLL_TIMEOUT
+    monkeypatch.setattr(inbox.imaplib, "IMAP4_SSL", by_name)
+    FakeIMAP.messages = {7: _raw_message(subject="hi", from_address="recruiter@acme.test")}
+    assert inbox.poll_account(connected)["polled"] == 1
+    assert FakeIMAP.instances[-1].timeout == inbox.MAIL_SOCKET_TIMEOUT
 
 
 # ---------------------------------------------------------------------------
@@ -1278,3 +1332,115 @@ def test_where_is_my_data_reads_the_given_db_read_only_and_masks_addresses(
     with pytest.raises(sqlite3.OperationalError):
         conn.execute("DELETE FROM mail_account")
     conn.close()
+
+
+# ---------------------------------------------------------------------------
+# The socket goes where the check looked (DNS rebinding)
+# ---------------------------------------------------------------------------
+
+
+def _getaddrinfo_rebinding(first: str, then: str):
+    """DNS that answers ``first`` once, then ``then``: a rebinding name."""
+    import socket
+
+    answers = iter([first])
+
+    def fake(host, port, *args, **kwargs):
+        address = next(answers, then)
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, port))]
+
+    return fake
+
+
+@pytest.mark.parametrize(
+    ("kind", "host", "port"),
+    [("imap", "imap.mail.yahoo.com", 993), ("smtp", "smtp.mail.yahoo.com", 465)],
+)
+def test_the_socket_is_opened_to_the_checked_address_not_a_second_lookup(
+    monkeypatch, no_socket, recording_context, kind, host, port
+):
+    """A name that turns private after the check still only reaches the checked address.
+
+    The connection is opened to the IP the check approved; resolving the name
+    a second time (as imaplib and smtplib do when handed a host name) would
+    have reached 10.0.0.7.  The certificate is still checked against the name.
+    """
+    from dreamjob.mail import imap_basic
+
+    monkeypatch.setattr(imap_basic.socket, "getaddrinfo", _getaddrinfo_rebinding(PUBLIC_IP, "10.0.0.7"))
+    with pytest.raises(_StopAtTls):
+        REAL_CLIENTS[kind](host, port, timeout=5.0)
+
+    assert no_socket == [((PUBLIC_IP, port), 5.0)]
+    assert recording_context.server_hostnames == [host]
+
+
+def test_starttls_on_587_is_opened_to_the_checked_address(monkeypatch, no_socket):
+    """The plain SMTP leg is pinned too; STARTTLS then names the host."""
+    import smtplib
+
+    from dreamjob.mail import imap_basic
+
+    monkeypatch.setattr(imap_basic.socket, "getaddrinfo", _getaddrinfo_rebinding(PUBLIC_IP, "10.0.0.7"))
+    # Stop right after the socket: the greeting is read from it.
+    monkeypatch.setattr(smtplib.SMTP, "getreply", lambda self: (_ for _ in ()).throw(_StopAtTls()))
+    with pytest.raises(_StopAtTls):
+        REAL_CLIENTS["smtp"]("smtp.mail.me.com", 587, timeout=5.0)
+
+    assert no_socket == [((PUBLIC_IP, 587), 5.0)]
+
+
+# ---------------------------------------------------------------------------
+# Folder names as IMAP arguments
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "argument"),
+    [
+        ("INBOX", '"INBOX"'),
+        ("Sent Items", '"Sent Items"'),
+        ("R&D", '"R&-D"'),
+        ("Boîte de réception", '"Bo&AO4-te de r&AOk-ception"'),
+        # RFC 3501 section 5.1.3's own example.
+        ("~peter/mail/台北/日本語", '"~peter/mail/&U,BTFw-/&ZeVnLIqe-"'),
+    ],
+)
+def test_a_folder_name_becomes_one_quoted_modified_utf7_argument(name, argument):
+    from dreamjob.mail.base import imap_mailbox
+
+    assert imap_mailbox(name) == argument
+
+
+@pytest.mark.parametrize("name", ['a"b', "a\\b", "a\r\nb", "a\0b"])
+def test_a_folder_name_that_could_break_the_quoting_is_refused(name):
+    from dreamjob.mail.base import MailBackendError, imap_mailbox
+
+    with pytest.raises(MailBackendError):
+        imap_mailbox(name)
+
+
+@pytest.mark.parametrize(
+    ("folder", "on_server"),
+    [("Sent Items", "Sent Items"), ("Boîte de réception", "Bo&AO4-te de r&AOk-ception")],
+)
+def test_a_folder_with_a_space_or_an_accent_connects_and_is_polled(
+    seeker_id: str, folder: str, on_server: str
+):
+    """``Sent Items`` used to reach the server as two arguments; ``Boîte`` never left imaplib."""
+    from dreamjob.db.repositories import dispatch as repo
+    from dreamjob.mail import inbox
+    from dreamjob.mail.imap_basic import connect
+
+    FakeIMAP.folders = ("INBOX", on_server)
+    account = connect(
+        seeker_id, address=ADDRESS, password=APP_PASSWORD, provider="yahoo", folder=folder
+    )
+    assert FakeIMAP.instances[-1].selected == on_server
+
+    FakeIMAP.messages = {3: _raw_message(subject="reply", from_address="hr@acme.test")}
+    result = inbox.poll_account(repo.get_account_any(account["id"]))
+
+    assert result["polled"] == 1
+    assert FakeIMAP.instances[-1].selected_arg == f'"{on_server}"'
+    assert repo.get_poll_state(account["id"])["folder"] == folder

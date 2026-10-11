@@ -20,6 +20,13 @@ class _Recorder:
         raise ConnectionAbortedError("recorded; no network in tests")
 
 
+class _ByName:
+    """A backend the poller connects by host name, as it does the operator's Gmail."""
+
+    def imap_endpoint(self):
+        return "imap.gmail.com", 993
+
+
 def _assert_verified(call):
     context = call["ssl_context"]
     assert isinstance(context, ssl.SSLContext), "no context passed: imaplib would not verify"
@@ -48,5 +55,5 @@ def test_the_reply_poller_connects_with_a_verifying_context(monkeypatch):
     monkeypatch.setattr(inbox.imaplib, "IMAP4_SSL", _Recorder)
     monkeypatch.setattr(inbox.repo, "get_poll_state", lambda _id: {})
     with pytest.raises(ConnectionAbortedError):
-        inbox.poll_imap({"id": "acct", "address": "a@example.org"}, None, password="x")
+        inbox.poll_imap({"id": "acct", "address": "a@example.org"}, _ByName(), password="x")
     _assert_verified(_Recorder.calls[0])

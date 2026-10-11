@@ -64,16 +64,14 @@ from dreamjob.mail.base import (
     MailBackendNotConfigured,
     MailBackendUnavailable,
     get_backend,
+    imap_mailbox,
     pollable_backends,
-    verified_tls_context,
 )
+from dreamjob.mail.tls import MAIL_SOCKET_TIMEOUT, verified_context
 from dreamjob.security.audit import record_audit
 
 log = logging.getLogger(__name__)
 
-#: Seconds before an IMAP socket gives up.  Without it a server that accepts
-#: the connection and then says nothing holds the poll job forever.
-POLL_TIMEOUT = 60.0
 #: Messages larger than this are skipped, not fetched: a reply or a bounce is a
 #: few kB, and the cap is the largest message the providers accept anyway.
 MAX_FETCH_BYTES = 25 * 1024 * 1024
@@ -696,7 +694,8 @@ def poll_imap(
     """Poll over IMAP with :mod:`imaplib`, resuming from the stored UID.
 
     Host, port and credential all come from the backend
-    (:meth:`imap_endpoint`, :meth:`imap_password`) rather than from the global
+    (:meth:`imap_endpoint` or :meth:`open_imap`, and :meth:`imap_password`)
+    rather than from the global
     settings, which is what lets one installation poll a Gmail over XOAUTH2 and
     a Yahoo over an application password at the same time.  A backend answering
     ``None`` for the password gets XOAUTH2, which is Gmail's way.
@@ -710,11 +709,17 @@ def poll_imap(
     address = str(account.get("address") or "")
     if password is None:
         password = backend.imap_password()
-    host, port = backend.imap_endpoint()
-
-    client = imaplib.IMAP4_SSL(
-        host, port, ssl_context=verified_tls_context(), timeout=POLL_TIMEOUT
-    )
+    # A backend that connects user-chosen hosts (imap_basic) opens the session
+    # itself, pinned to the address its host check approved; the operator's
+    # Gmail host is connected by name.
+    opener = getattr(backend, "open_imap", None)
+    if callable(opener):
+        client = opener(MAIL_SOCKET_TIMEOUT)
+    else:
+        host, port = backend.imap_endpoint()
+        client = imaplib.IMAP4_SSL(
+            host, port, ssl_context=verified_context(), timeout=MAIL_SOCKET_TIMEOUT
+        )
     try:
         if password:
             client.login(address, password)
@@ -729,9 +734,9 @@ def poll_imap(
         folder = _backend_folder(backend) or state.get("folder") or "INBOX"
         if state.get("folder") and state["folder"] != folder:
             state = {**state, "last_uid": None, "uid_validity": None}
-        client.select(folder, readonly=True)
+        client.select(imap_mailbox(folder), readonly=True)
 
-        typ, data = client.status(folder, "(UIDVALIDITY)")
+        typ, data = client.status(imap_mailbox(folder), "(UIDVALIDITY)")
         validity = ""
         if typ == "OK" and data:
             match = re.search(rb"UIDVALIDITY (\d+)", data[0] or b"")

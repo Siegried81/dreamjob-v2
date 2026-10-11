@@ -36,9 +36,9 @@ Gmail?".
 
 from __future__ import annotations
 
+import base64
 import json
 import mimetypes
-import ssl
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -65,23 +65,41 @@ class MailBackendUnavailable(MailBackendError):
 
 
 # ---------------------------------------------------------------------------
-# TLS for the mail transports
+# IMAP arguments
 # ---------------------------------------------------------------------------
 
 
-def verified_tls_context() -> ssl.SSLContext:
-    """A TLS context that checks the certificate and the host name, TLS 1.2 or later.
+def imap_mailbox(name: str) -> str:
+    """A folder name as the single IMAP argument ``SELECT`` and ``STATUS`` expect.
 
-    Passed explicitly to every ``IMAP4_SSL``, ``SMTP_SSL`` and ``starttls`` call,
-    because :mod:`imaplib` and :mod:`smtplib` default to
-    ``ssl._create_stdlib_context()``, which verifies nothing: without this an
-    application password would be handed to whoever answers on the port.
+    :mod:`imaplib` sends arguments verbatim and in ASCII, so ``Sent Items``
+    reached the server as two arguments and was refused, and ``Boîte de
+    réception`` raised before anything was sent.  The name is therefore encoded
+    in IMAP's modified UTF-7 (RFC 3501 §5.1.3: ``&`` becomes ``&-``, anything
+    outside printable ASCII becomes ``&<base64 of UTF-16BE, "," for "/">-``)
+    and wrapped in a quoted string.  Quotes, backslashes and line breaks are
+    refused rather than escaped: no real folder needs them, and refusing keeps
+    the quoted string impossible to break out of.
     """
-    context = ssl.create_default_context()
-    context.minimum_version = ssl.TLSVersion.TLSv1_2
-    context.check_hostname = True
-    context.verify_mode = ssl.CERT_REQUIRED
-    return context
+    if any(c in name for c in '"\\\r\n\0'):
+        raise MailBackendError("The folder name contains a character IMAP cannot carry.")
+    out: list[str] = []
+    pending: list[str] = []
+
+    def flush() -> None:
+        if pending:
+            raw = "".join(pending).encode("utf-16-be")
+            out.append("&" + base64.b64encode(raw).decode("ascii").rstrip("=").replace("/", ",") + "-")
+            pending.clear()
+
+    for char in name:
+        if 0x20 <= ord(char) <= 0x7E:
+            flush()
+            out.append("&-" if char == "&" else char)
+        else:
+            pending.append(char)
+    flush()
+    return '"' + "".join(out) + '"'
 
 
 # ---------------------------------------------------------------------------

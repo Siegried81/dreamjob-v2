@@ -56,16 +56,17 @@ resolves - on *any* of its addresses - to a loopback, private, link-local
 and any port other than the mail ones (IMAP 993, SMTP 465 or 587).  It runs at
 connect, before every poll (:meth:`ImapBasicBackend.imap_endpoint`) and before
 every send, so a name whose DNS later changes is caught on its next use.  Every
-socket uses :func:`base.verified_tls_context` and a timeout, and errors shown to
+socket uses :func:`dreamjob.mail.tls.verified_context` and a timeout, and errors shown to
 the client are fixed sentences: a provider's own text, which an attacker could
 use as a port-scanning oracle, is logged server-side by exception type only.
 
 Note on reading (FR-326)
 ------------------------
-The poller reads this mailbox through :func:`dreamjob.mail.inbox.poll_imap`,
-unchanged: that function asks the backend for its endpoint and its password, so
-the only difference from Gmail-over-IMAP is that :meth:`imap_password` answers
-with a password instead of ``None``.  Reading is also all it does - a message
+The poller reads this mailbox through :func:`dreamjob.mail.inbox.poll_imap`:
+that function asks the backend for its session (:meth:`open_imap`, connected to
+the address the host check approved) and its password, so the only other
+difference from Gmail-over-IMAP is that :meth:`imap_password` answers with a
+password instead of ``None``.  Reading is also all it does - a message
 that matches no dispatch Dream Job sent is recorded and classified, never
 turned into an opportunity, and nothing here ever deletes or moves mail.  The
 IMAP session is opened ``readonly``.
@@ -95,9 +96,10 @@ from dreamjob.mail.base import (
     SendResult,
     decrypt_credentials,
     encrypt_credentials,
+    imap_mailbox,
     register_backend,
-    verified_tls_context,
 )
+from dreamjob.mail.tls import verified_context
 
 log = logging.getLogger(__name__)
 
@@ -186,6 +188,16 @@ class ImapBasicBackend(MailBackend):
 
     def imap_folder(self) -> str:
         return str(self.credentials.get("folder") or "INBOX")
+
+    def open_imap(self, timeout: float) -> imaplib.IMAP4_SSL:
+        """The poller's session, opened to the address the host check approved.
+
+        The poller asks for this rather than building ``IMAP4_SSL`` from
+        :meth:`imap_endpoint` itself, because that would resolve the name a
+        second time after the check (see :func:`check_endpoint`).
+        """
+        host, port = self.imap_endpoint()
+        return _imap_client(host, port, timeout=timeout)
 
     # -- MailBackend ------------------------------------------------------
     def sender_address(self) -> str:
@@ -446,12 +458,18 @@ def _is_public(address: str) -> bool:
     return ip.is_global
 
 
-def check_endpoint(host: str, port: int, *, kind: str) -> None:
+def check_endpoint(host: str, port: int, *, kind: str) -> str:
     """Refuse a host or port the server must not connect to on a user's behalf.
 
     Every resolved address is checked, not the first one: a name with one
     public and one private record would otherwise pass the check and still let
     the socket library pick the private one.
+
+    Returns the address that was checked, which is the one the clients below
+    connect to.  Handing the name back to :mod:`imaplib` or :mod:`smtplib`
+    instead would make them resolve it a second time, and a DNS record that
+    answers "public" to the check and "private" a moment later (DNS rebinding)
+    would get the connection the check refused.
     """
     _check_port(int(port), kind)
     literal = host.strip("[]")
@@ -469,6 +487,7 @@ def check_endpoint(host: str, port: int, *, kind: str) -> None:
             f"The mail host {host} resolves to an address Dream Job will not connect to "
             "(loopback, private, link-local or otherwise not public)."
         )
+    return addresses[0]
 
 
 # ---------------------------------------------------------------------------
@@ -483,20 +502,71 @@ def _tls_failed(host: str) -> str:
     )
 
 
+class _PinnedIMAP4_SSL(imaplib.IMAP4_SSL):
+    """``IMAP4_SSL`` that opens its socket to an address already checked.
+
+    The certificate is still verified against the host *name* (``self.host``),
+    so pinning the address changes where the packets go, not what is trusted.
+    ``_create_socket`` is imaplib's own seam for this, unchanged in its
+    contract since Python 3.9; the tests drive the real class and assert the
+    address the socket was opened to, so a Python that renamed it would fail
+    them rather than quietly reconnect by name.
+    """
+
+    def __init__(self, host: str, port: int, *, address: str, ssl_context, timeout: float):
+        self._pinned_address = address  # set before super(): __init__ connects
+        super().__init__(host, port, ssl_context=ssl_context, timeout=timeout)
+
+    def _create_socket(self, timeout):
+        sock = socket.create_connection((self._pinned_address, self.port), timeout)
+        return self.ssl_context.wrap_socket(sock, server_hostname=self.host)
+
+
+class _PinnedSMTPMixin:
+    """Route smtplib's socket to the checked address; TLS still names the host.
+
+    ``connect`` keeps the name in ``self._host``, which both ``SMTP_SSL`` and
+    ``starttls`` pass as ``server_hostname``, so only the TCP target moves.
+    """
+
+    def __init__(self, host: str, port: int, *, address: str, **kwargs):
+        self._pinned_address = address  # set before super(): __init__ connects
+        super().__init__(host, port, **kwargs)
+
+    def _get_socket(self, host, port, timeout):
+        return super()._get_socket(self._pinned_address, port, timeout)
+
+
+class _PinnedSMTP(_PinnedSMTPMixin, smtplib.SMTP):
+    pass
+
+
+class _PinnedSMTP_SSL(_PinnedSMTPMixin, smtplib.SMTP_SSL):
+    pass
+
+
 def _imap_client(host: str, port: int, *, timeout: float) -> imaplib.IMAP4_SSL:
-    """Indirected so tests can substitute a fake server without a socket."""
-    return imaplib.IMAP4_SSL(host, port, ssl_context=verified_tls_context(), timeout=timeout)
+    """A verified IMAP session to the address :func:`check_endpoint` just approved.
+
+    Indirected so tests can substitute a fake server without a socket.
+    """
+    address = check_endpoint(host, port, kind="imap")
+    return _PinnedIMAP4_SSL(
+        host, port, address=address, ssl_context=verified_context(), timeout=timeout
+    )
 
 
 def _smtp_client(host: str, port: int, *, timeout: float) -> smtplib.SMTP:
     """An SMTP session already under verified TLS, by implicit TLS or STARTTLS.
 
-    On 587 ``starttls`` raises when the server does not offer the upgrade, so a
+    Opened to the address :func:`check_endpoint` just approved.  On 587
+    ``starttls`` raises when the server does not offer the upgrade, so a
     session never continues in plaintext with the password still to come.
     """
-    context = verified_tls_context()
+    address = check_endpoint(host, port, kind="smtp")
+    context = verified_context()
     if port == SMTP_STARTTLS_PORT:
-        client = smtplib.SMTP(host, port, timeout=timeout)
+        client = _PinnedSMTP(host, port, address=address, timeout=timeout)
         try:
             client.ehlo()
             client.starttls(context=context)
@@ -505,7 +575,7 @@ def _smtp_client(host: str, port: int, *, timeout: float) -> smtplib.SMTP:
             client.close()
             raise
         return client
-    return smtplib.SMTP_SSL(host, port, context=context, timeout=timeout)
+    return _PinnedSMTP_SSL(host, port, address=address, context=context, timeout=timeout)
 
 
 def verify_credentials(
@@ -538,7 +608,7 @@ def verify_credentials(
         client.login(address, password)
         # Selecting proves the folder exists, which is the other way setup goes
         # wrong: a folder named in the UI that IMAP spells differently.
-        typ, _ = client.select(folder, readonly=True)
+        typ, _ = client.select(imap_mailbox(folder), readonly=True)
         if typ != "OK":
             raise MailBackendError(
                 f"Signed in to {imap_host}, but the folder {folder!r} does not exist "
