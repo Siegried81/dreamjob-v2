@@ -69,3 +69,25 @@ by hand did not.
 **What would reverse it.** Making the package installable from
 `requirements.txt` (`-e .`), after which the prefix becomes unnecessary and the
 order stops mattering.
+
+## 2026-10-11 — scores change meaning: area search, and a stricter dream-job score
+
+Ported from stepvda/dreamjob (d01c0f1 and 318e83b, Stephane van der Aa), with
+his macOS service files left out.
+
+**What a score now means.** `pipeline/scoring.py` was reworked upstream: a
+skill estimate shrinks towards a prior when the evidence is thin, a part of a
+posting that cannot be assessed counts as neutral instead of as a match, a job
+family needs two matches outside the title, and filler culture phrases are
+ignored. `intelligence/gap_analysis.py` reads its weights from the scorer.
+Fewer postings reach the top band on wording alone. **Scores computed before
+this change are not comparable with scores after it** - re-score before
+comparing two lists.
+
+**Area search.** Opportunities can be filtered by distance (`near_lat`,
+`near_lon`, `radius_km`, `include_remote`), with place autocomplete. Every
+opportunity is now placed on the map by a `geolocation` scheduler task
+(every 2 minutes, through Nominatim at one request per second, as the existing
+`geocode.py` already does; migration 158), which replaces the manual locate
+button. This is a new background process that sends requests to a third party.
+

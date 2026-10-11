@@ -46,7 +46,7 @@ from dreamjob.db.repositories import campaigns as campaign_repo
 from dreamjob.db.repositories import opportunities as repo
 from dreamjob.llm.client import BudgetExhausted, LLMClient, LLMError, redact
 from dreamjob.pipeline import directives as dir_mod
-from dreamjob.pipeline import scoring
+from dreamjob.pipeline import locate, scoring
 from dreamjob.pipeline import signals as signals_mod
 from dreamjob.pipeline.enrichment import load_prompt
 from dreamjob.pipeline.opportunities import (
@@ -613,6 +613,9 @@ def generate_campaign(
             log.info("No usable evidence for speculative openings at %s", company.get("name"))
 
         for record in openings:
+            # A speculative opening is at the employer: placed at its address
+            # in the town named, or at its only site (FR-144).
+            locate.place_now(record, company)
             reason = rejection_reason(record, company, directive_set)
             if reason:
                 report.rejected += 1

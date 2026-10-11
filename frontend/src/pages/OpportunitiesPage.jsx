@@ -28,6 +28,7 @@ import { Caution, FirstRun, HelpTip, ScreenIntro } from '../components/Help'
 import Icon from '../components/Icon'
 import WorkflowMap from '../components/WorkflowMap'
 import { useSession } from '../session'
+import { PlaceAutocomplete } from './directives/controls'
 import { EmployerCompanyLine } from './employers'
 import {
   Badge,
@@ -249,6 +250,12 @@ const EMPTY_FILTERS = {
   country: '',
   min_score: 0,
   exclude_not_interested: false,
+  // FR-144: a place and a radius. Empty coordinates mean "no area filter".
+  near_label: '',
+  near_lat: '',
+  near_lon: '',
+  radius_km: 25,
+  include_remote: true,
 }
 
 function human(value) {
@@ -281,7 +288,85 @@ function FacetSelect({ label, name, facet, value, onChange }) {
   )
 }
 
-function FilterBar({ facets, filters, onChange, onReset }) {
+/**
+ * FR-144: keep the opportunities within a radius of a place. Most sources send
+ * a place name, not coordinates; the backend places every opportunity on the
+ * map as it is added (and works through older ones in the background), so the
+ * coverage line only says how many rows the radius cannot judge yet.
+ */
+function AreaFilter({ filters, onChange, onArea, coverage }) {
+  const active = filters.near_lat !== ''
+  const pending = coverage?.pending ?? 0
+  const unplaced = coverage?.unplaced ?? 0
+  return (
+    <div className="filter-grid" style={{ marginTop: 12 }}>
+      <div className="filter-grid-wide">
+        <Field label="Work within reach of">
+          {active ? (
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <span className="badge" title={filters.near_label}>
+                <Icon name="target" /> {filters.near_label.split(',')[0]}
+              </span>
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                onClick={() => onArea({ near_label: '', near_lat: '', near_lon: '' })}
+              >
+                Remove
+              </button>
+            </div>
+          ) : (
+            <PlaceAutocomplete
+              placeholder="City, e.g. Brussels"
+              onPick={(place) => {
+                // A label typed without a geocoder match has no coordinates to
+                // measure from, so it cannot become a radius.
+                if (place.latitude == null || place.longitude == null) return
+                onArea({
+                  near_label: place.label,
+                  near_lat: place.latitude,
+                  near_lon: place.longitude,
+                })
+              }}
+            />
+          )}
+        </Field>
+      </div>
+      <Field label="Radius (km)">
+        <input
+          type="number"
+          min="1"
+          max="1000"
+          step="5"
+          value={filters.radius_km}
+          onChange={(e) => onChange('radius_km', Math.max(1, Number(e.target.value) || 1))}
+        />
+      </Field>
+      <div className="field">
+        <label>&nbsp;</label>
+        <label className="checkline">
+          <input
+            type="checkbox"
+            checked={filters.include_remote}
+            onChange={(e) => onChange('include_remote', e.target.checked)}
+          />
+          Keep remote roles
+        </label>
+      </div>
+      {active && coverage && (pending > 0 || unplaced > 0) && (
+        <p className="filter-note small muted" style={{ gridColumn: '1 / -1' }}>
+          {pending > 0 &&
+            `${pending} of ${coverage.total} opportunities are still being placed on the map. `}
+          {unplaced > 0 &&
+            `${unplaced} name no exact place (only a country, or none) and cannot be measured from.`}{' '}
+          The area filter leaves these out.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function FilterBar({ facets, filters, onChange, onArea, onReset, coverage }) {
   const active = Object.keys(EMPTY_FILTERS).some(
     (k) => String(filters[k] ?? '') !== String(EMPTY_FILTERS[k]),
   )
@@ -404,6 +489,8 @@ function FilterBar({ facets, filters, onChange, onReset }) {
           onChange={onChange}
         />
       </div>
+
+      <AreaFilter filters={filters} onChange={onChange} onArea={onArea} coverage={coverage} />
 
       <div className="row row-wrap" style={{ marginTop: 12, gap: 14, alignItems: 'center' }}>
         <label className="checkline">
@@ -1051,6 +1138,12 @@ export default function OpportunitiesPage() {
     }
     if (filters.min_score > 0) p.set('min_score', String(filters.min_score))
     if (filters.exclude_not_interested) p.set('exclude_not_interested', 'true')
+    if (filters.near_lat !== '' && filters.near_lon !== '') {
+      p.set('near_lat', String(filters.near_lat))
+      p.set('near_lon', String(filters.near_lon))
+      p.set('radius_km', String(filters.radius_km))
+      if (!filters.include_remote) p.set('include_remote', 'false')
+    }
     p.set('sort', sort)
     p.set('respect_manual_order', manualOrder ? 'true' : 'false')
     p.set('limit', String(PAGE_SIZE))
@@ -1059,6 +1152,10 @@ export default function OpportunitiesPage() {
   }, [campaignId, debouncedQ, filters, sort, manualOrder, offset])
 
   const list = useFetch(() => api.get(`/opportunities?${query}`), [query])
+
+  // FR-144: how many rows the area filter can judge. Refreshed with the list,
+  // so a background placement run shows its progress as the list is used.
+  const coverage = useFetch(() => api.get('/opportunities/locations'), [query])
 
   // The shortlist lives on the server, so "the selected" is a query, not local
   // state - it stays correct across pages and filters (FR-284, FR-321).
@@ -1133,6 +1230,11 @@ export default function OpportunitiesPage() {
   function change(name, value) {
     setOffset(0)
     setFilters((f) => ({ ...f, [name]: value }))
+  }
+
+  function changeArea(values) {
+    setOffset(0)
+    setFilters((f) => ({ ...f, ...values }))
   }
 
   async function patch(id, body) {
@@ -1741,6 +1843,8 @@ export default function OpportunitiesPage() {
         facets={facets.data}
         filters={filters}
         onChange={change}
+        onArea={changeArea}
+        coverage={coverage.data}
         onReset={() => {
           setFilters(EMPTY_FILTERS)
           setOffset(0)
