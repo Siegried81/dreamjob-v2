@@ -38,9 +38,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           # The lowest version pyproject allows (requires-python >= 3.11) and the
           # one ruff targets (target-version = py311): testing the floor catches
@@ -76,9 +76,9 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           # Vite 8 needs Node ^20.19 or >= 22.12; 22 is the maintained LTS.
           node-version: "22"
