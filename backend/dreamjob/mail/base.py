@@ -241,8 +241,21 @@ def all_capabilities() -> list[BackendCapabilities]:
     return [cls.capabilities for cls in _REGISTRY.values()]
 
 
+_LOADED = False
+
+
 def _load_backends() -> None:
-    """Import the concrete backends once, on first use (avoids an import cycle)."""
-    if _REGISTRY:
+    """Import the concrete backends once, on first use (avoids an import cycle).
+
+    Guarded by a flag, not by "is the registry empty?": a backend module that is
+    imported directly before the first lookup (a router, a test, the dispatcher)
+    registers itself and makes the registry non-empty, and the old guard then
+    returned early and never imported the others - so after
+    ``import dreamjob.mail.resend_backend`` the lookup of ``gmail_oauth`` raised
+    ``MailBackendError``.
+    """
+    global _LOADED
+    if _LOADED:
         return
+    _LOADED = True
     from dreamjob.mail import gmail, resend_backend  # noqa: F401,PLC0415
