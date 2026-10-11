@@ -46,8 +46,7 @@ from dreamjob.db.repositories import campaigns as campaign_repo
 from dreamjob.db.repositories import opportunities as repo
 from dreamjob.llm.client import BudgetExhausted, LLMClient, LLMError, redact
 from dreamjob.pipeline import directives as dir_mod
-from dreamjob.pipeline import locate
-from dreamjob.pipeline import scoring
+from dreamjob.pipeline import locate, scoring
 from dreamjob.pipeline import signals as signals_mod
 from dreamjob.pipeline.enrichment import load_prompt
 from dreamjob.pipeline.opportunities import (
