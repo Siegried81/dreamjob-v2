@@ -1,0 +1,94 @@
+# Continuous integration: the same commands the README documents for a
+# contributor's machine (section "Development"), run on every pull request and
+# on every push to main.  Nothing here is CI-specific, so a red job is
+# reproducible locally with the identical command - which is the point of
+# mirroring the README rather than inventing a second set of invocations.
+#
+#   python3 -m ruff check backend/dreamjob
+#   PYTHONPATH=backend python3 -m pytest tests/unit tests/integration -q -m 'not llm and not load'
+#   cd frontend && npm ci && npm run build
+#
+# The `llm` and `load` markers are deselected on purpose: those tests need a live
+# model or a loaded API and have no place in a per-commit check.  tests/e2e is
+# left out for the same reason: it drives a real Chromium against a running app.
+
+name: CI
+
+# Feature branches are checked through their pull request; main is checked on
+# push so the merged result has its own verdict.  Running on every branch push
+# as well would test the same commit twice.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The workflow only reads the repository; it never needs a write token.
+permissions:
+  contents: read
+
+# A newer push to the same ref cancels the run in progress: only the latest
+# commit's verdict matters.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend - ruff + pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # The lowest version pyproject allows (requires-python >= 3.11) and the
+          # one ruff targets (target-version = py311): testing the floor catches
+          # a newer-only stdlib call that ruff would not flag.
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install
+        run: python3 -m pip install -r requirements.txt
+
+      # Lint first: it finishes in seconds, so an unused import does not wait
+      # behind the test suite to be reported.
+      - name: Lint (ruff)
+        run: python3 -m ruff check backend/dreamjob
+
+      - name: Unit + integration tests
+        env:
+          # The tests create their own throwaway SQLite file and master key per
+          # test; nothing here is a real secret.  Mail dry-run is already the
+          # default, set explicitly so no message can ever leave CI.
+          DREAMJOB_ENV: development
+          DREAMJOB_MAIL_DRY_RUN: "true"
+        run: >
+          PYTHONPATH=backend python3 -m pytest tests/unit tests/integration
+          -q -m 'not llm and not load' -p no:cacheprovider
+
+  frontend:
+    name: Frontend - vite build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Vite 8 needs Node ^20.19 or >= 22.12; 22 is the maintained LTS.
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # `npm ci` installs exactly the lockfile, so a build that passes here is
+      # the build that ships; `npm install` could silently resolve newer deps.
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
