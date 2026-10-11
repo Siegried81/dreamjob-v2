@@ -191,7 +191,7 @@ class FakeImap:
 
     instances: list[FakeImap] = []
 
-    def __init__(self, host: str, port: int) -> None:
+    def __init__(self, host: str, port: int, **_kwargs) -> None:
         self.host, self.port = host, port
         self.logged_in: tuple[str, str] | None = None
         self.selected: tuple[str, bool] | None = None
@@ -252,8 +252,8 @@ def test_a_yahoo_mailbox_feeds_the_account_that_logs_in_with_it(monkeypatch) -> 
     message = _message("LinkedIn <jobalerts-noreply@linkedin.com>", html)
 
     class LoadedImap(FakeImap):
-        def __init__(self, host: str, port: int) -> None:
-            super().__init__(host, port)
+        def __init__(self, host: str, port: int, **kwargs) -> None:
+            super().__init__(host, port, **kwargs)
             self.messages = {b"1": bytes(message)}
 
     monkeypatch.setattr(job_alerts.imaplib, "IMAP4_SSL", LoadedImap)
@@ -361,8 +361,8 @@ def test_the_owner_setting_sends_a_mailbox_to_another_account(monkeypatch) -> No
     message = _message("LinkedIn <jobalerts-noreply@linkedin.com>", html)
 
     class LoadedImap(FakeImap):
-        def __init__(self, host: str, port: int) -> None:
-            super().__init__(host, port)
+        def __init__(self, host: str, port: int, **kwargs) -> None:
+            super().__init__(host, port, **kwargs)
             self.messages = {b"1": bytes(message)}
 
     monkeypatch.setattr(job_alerts.imaplib, "IMAP4_SSL", LoadedImap)
