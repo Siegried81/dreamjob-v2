@@ -1,43 +1,46 @@
 # --- Web / API -------------------------------------------------------------
-fastapi>=0.115
-uvicorn[standard]>=0.30
-python-multipart>=0.0.9
-pydantic>=2.7
-pydantic-settings>=2.3
+fastapi>=0.143.0
+uvicorn[standard]>=0.54.0
+python-multipart>=0.0.32
+pydantic>=2.13.5
+pydantic-settings>=2.15.0
 
 # --- HTTP / egress ---------------------------------------------------------
-httpx>=0.27
-tenacity>=8.3
+httpx>=0.28.1
+tenacity>=9.2.1
 
 # --- Documents -------------------------------------------------------------
-pypdf>=4.2
-pdfplumber>=0.11
-python-docx>=1.1
-reportlab>=4.2
-Pillow>=10.3
-jinja2>=3.1
+pypdf>=6.19.0
+pdfplumber>=0.11.10
+python-docx>=1.2.0
+reportlab>=5.0.1
+Pillow>=12.3.0
+jinja2>=3.1.6
 
 # --- Parsing ---------------------------------------------------------------
 # CAPPED: selectolax 1.0 removed the Modest backend this code imports
 # (`from selectolax.parser import HTMLParser` raises ImportError, telling the
 # caller to use LexborHTMLParser).  Raising the cap means porting every HTML
 # adapter to the Lexbor parser first.
-selectolax>=0.3.21,<1.0
-lxml>=5.2
+selectolax>=1.0.0,<2.0
+lxml>=6.1.3
 
 # --- Browser automation (FR-201) -------------------------------------------
-playwright>=1.44
+playwright>=1.63.0
 
 # --- Security --------------------------------------------------------------
-cryptography>=42.0
-argon2-cffi>=23.1
-pyotp>=2.9
+cryptography>=50.0.2
+argon2-cffi>=25.1.0
+pyotp>=2.10.0
 
 # --- Email -----------------------------------------------------------------
-dnspython>=2.6
-email-validator>=2.1
+dnspython>=2.8.0
+email-validator>=2.3.0
 
 # --- Dev -------------------------------------------------------------------
+pytest>=9.1.1
+pytest-asyncio>=1.4.0
+ruff>=0.16.10
 pytest>=8.2
 pytest-asyncio>=0.23
 ruff==0.17.0  # pinned: CI installs whatever this resolves to, and a new ruff release adding rules turned a green branch red without a code change
@@ -46,4 +49,4 @@ ruff==0.17.0  # pinned: CI installs whatever this resolves to, and a new ruff re
 # this package ZoneInfo("Europe/Brussels") raises ZoneInfoNotFoundError, which
 # took 50 tests down on a fresh Windows clone (mail dispatch windows, post-app
 # monitoring, the apply browser). The old clone had it only transitively.
-tzdata>=2024.1
+tzdata>=2026.5
