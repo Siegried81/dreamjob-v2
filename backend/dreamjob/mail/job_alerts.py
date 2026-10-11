@@ -56,7 +56,6 @@ from datetime import datetime, timedelta
 from email.message import EmailMessage
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import urlparse
 
 from dreamjob.adapters.base import NormalisedRecord
 from dreamjob.adapters.vacancy_source import (
@@ -72,6 +71,7 @@ from dreamjob.db.repositories import dispatch as dispatch_repo
 from dreamjob.db.repositories import knowledge as kb_repo
 from dreamjob.db.repositories import seekers as seekers_repo
 from dreamjob.mail.inbox import _first_address, _received_at
+from dreamjob.mail.tls import MAIL_SOCKET_TIMEOUT, verified_context
 from dreamjob.monitoring import watchlist
 from dreamjob.pipeline import knowledge_base
 from dreamjob.pipeline.vacancy_refresh import notify_added
@@ -680,7 +680,8 @@ class ImapAlertMailbox:
         self._client: imaplib.IMAP4_SSL | None = None
 
     def __enter__(self) -> ImapAlertMailbox:
-        self._client = imaplib.IMAP4_SSL(self.host, self.port)
+        self._client = imaplib.IMAP4_SSL(self.host, self.port, ssl_context=verified_context(),
+                                         timeout=MAIL_SOCKET_TIMEOUT)
         self._client.login(self.user, self.password)
         self._client.select("INBOX", readonly=True)
         return self

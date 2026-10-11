@@ -45,6 +45,7 @@ from dreamjob.db.connection import utcnow
 from dreamjob.db.repositories import contacts as contacts_repo
 from dreamjob.db.repositories import dispatch as repo
 from dreamjob.mail import composer
+from dreamjob.mail.tls import MAIL_SOCKET_TIMEOUT, verified_context
 from dreamjob.security.audit import record_audit
 
 log = logging.getLogger(__name__)
@@ -639,7 +640,8 @@ def poll_imap(
     state = repo.get_poll_state(account["id"]) or {}
     address = str(account.get("address") or "")
 
-    client = imaplib.IMAP4_SSL(settings.imap_host, settings.imap_port)
+    client = imaplib.IMAP4_SSL(settings.imap_host, settings.imap_port,
+                               ssl_context=verified_context(), timeout=MAIL_SOCKET_TIMEOUT)
     try:
         if password:
             client.login(address, password)
