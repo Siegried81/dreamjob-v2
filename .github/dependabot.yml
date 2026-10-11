@@ -1,5 +1,8 @@
-# Dependency version updates: monthly, one grouped PR per ecosystem, so a
-# library release does not turn into a PR of its own. Security updates are
+# Dependency version updates: monthly, one grouped PR per ecosystem for minor
+# and patch releases, so a library release does not turn into a PR of its own.
+# Major releases stay out of the group and arrive as one PR each: a breaking
+# major hidden in a 25-package bump is how selectolax 1.0 removed an API this
+# code imported, and a PR of its own names the package that broke. Security updates are
 # enabled in the repository settings and arrive as soon as an advisory does,
 # independently of this schedule.
 version: 2
@@ -11,6 +14,7 @@ updates:
     groups:
       python-deps:
         patterns: ["*"]
+        update-types: [minor, patch]
 
   - package-ecosystem: npm
     directory: /frontend
@@ -19,6 +23,7 @@ updates:
     groups:
       frontend-deps:
         patterns: ["*"]
+        update-types: [minor, patch]
 
   - package-ecosystem: github-actions
     directory: /
@@ -27,3 +32,4 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+        update-types: [minor, patch]
