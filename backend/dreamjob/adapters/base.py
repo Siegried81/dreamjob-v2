@@ -294,7 +294,25 @@ def register_adapter(cls: type[SourceAdapter]) -> type[SourceAdapter]:
     return cls
 
 
+_discovered = False
+
+
 def get_adapter(key: str, egress: EgressClient | None = None) -> SourceAdapter:
+    """The registered adapter for ``key``, importing the adapter modules first if needed.
+
+    Adapters register themselves when their module is imported, and only the
+    API's start-up (``main.py`` -> ``load_all``) imported them. A process that
+    starts elsewhere - ``python -m dreamjob.monitoring.scheduler --once`` from
+    Windows Task Scheduler - found the registry empty and refused every board
+    with ``Unknown adapter 'ats.greenhouse'. Known: []``. Discovery runs once,
+    on the first miss, so the API path is unchanged.
+    """
+    global _discovered
+    if key not in _REGISTRY and not _discovered:
+        _discovered = True
+        from dreamjob.adapters import discover  # noqa: PLC0415 - the package imports this module
+
+        discover()
     if key not in _REGISTRY:
         raise KeyError(f"Unknown adapter {key!r}. Known: {sorted(_REGISTRY)}")
     return _REGISTRY[key](egress=egress)
