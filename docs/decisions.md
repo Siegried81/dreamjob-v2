@@ -51,3 +51,21 @@ package had pulled `tzdata` in transitively. Declared explicitly; the four
 modules go from 50 failures to 128 passed. Same fix as the fixtures attribute
 committed earlier today: the repository must be true on the machine it is
 cloned to, not only on the one it was written on.
+
+## 2026-10-10 — The quickstart installs before it generates keys
+
+**What.** README, `docs/Technical_Architecture.md`, `scripts/dev.sh` and the
+`bootstrap.py` warning now put `python3 -m venv` and `pip install` before
+`dreamjob.security.crypto --generate-key`, and prefix every `python -m
+dreamjob...` line with `PYTHONPATH=backend`.
+
+**Why.** The package lives under `backend/` and `requirements.txt` does not
+install it, so the documented first command failed with `ModuleNotFoundError`
+on a fresh clone: the generator imports the package's own dependencies, which
+were not installed yet, and the package itself, which was not on the path.
+`scripts/dev.sh` already set `PYTHONPATH=backend`; the commands a reader types
+by hand did not.
+
+**What would reverse it.** Making the package installable from
+`requirements.txt` (`-e .`), after which the prefix becomes unnecessary and the
+order stops mattering.

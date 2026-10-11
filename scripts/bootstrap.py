@@ -67,7 +67,7 @@ def main() -> int:
         print(
             "WARNING    : DREAMJOB_MASTER_KEY is not set. Encryption at rest (NFR-201) and "
             "MFA enrolment are unavailable until it is; generate one with\n"
-            "             python3 -m dreamjob.security.crypto --generate-key"
+            "             PYTHONPATH=backend python3 -m dreamjob.security.crypto --generate-key"
         )
 
     password = args.password or os.environ.get("DREAMJOB_BOOTSTRAP_PASSWORD") or ""

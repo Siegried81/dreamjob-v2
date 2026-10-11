@@ -194,13 +194,17 @@ file itself relies on disk encryption.
 ```bash
 git clone https://github.com/Siegried81/dreamjob-v2.git && cd dreamjob-v2
 
-cp .env.example .env
-python3 -m dreamjob.security.crypto --generate-key   # paste both values into .env
-$EDITOR .env                                          # add DEEPSEEK_API_KEY
-
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cd frontend && npm install && cd ..
+
+# The package lives under backend/ and requirements.txt does not install it,
+# so every `python -m dreamjob...` call needs PYTHONPATH=backend (scripts/dev.sh
+# sets it for you). Keys come after the install, since the generator imports
+# the package's own dependencies.
+cp .env.example .env
+PYTHONPATH=backend python3 -m dreamjob.security.crypto --generate-key   # paste both values into .env
+$EDITOR .env                                                             # add DEEPSEEK_API_KEY
 
 python3 scripts/bootstrap.py        # schema + first administrator account
 ./scripts/dev.sh                    # API :8000, SPA :5173 with /api proxied
