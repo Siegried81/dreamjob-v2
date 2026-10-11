@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import base64
 import email.utils
+import imaplib
 import os
 import secrets
 from collections.abc import Iterator
@@ -250,6 +251,9 @@ class FakeSMTP:
 
 PUBLIC_IP = "17.253.144.10"
 REAL_CLIENTS: dict[str, object] = {}
+#: The real class, kept before the autouse fixture swaps in FakeIMAP: the
+#: pinned client is built from ``imaplib.IMAP4_SSL`` when it connects.
+REAL_IMAP4_SSL = imaplib.IMAP4_SSL
 
 
 def _getaddrinfo_returning(*addresses: str):
@@ -804,6 +808,7 @@ def no_socket(monkeypatch):
         return object()
 
     monkeypatch.setattr(socket, "create_connection", fake_create_connection)
+    monkeypatch.setattr(imaplib, "IMAP4_SSL", REAL_IMAP4_SSL)
     return opened
 
 
@@ -841,7 +846,7 @@ def test_smtp_on_587_upgrades_with_starttls_on_a_verifying_context(monkeypatch):
     calls: list = []
 
     class FakePlainSMTP:
-        def __init__(self, host, port, *, address, timeout=None):
+        def __init__(self, host, port, *, address, timeout=None, context=None):
             calls.append(("connect", host, port, address, timeout))
 
         def ehlo(self):
@@ -853,7 +858,7 @@ def test_smtp_on_587_upgrades_with_starttls_on_a_verifying_context(monkeypatch):
         def close(self):
             calls.append(("close",))
 
-    monkeypatch.setattr(imap_basic, "_PinnedSMTP", FakePlainSMTP)
+    monkeypatch.setattr(imap_basic, "_open_smtp", FakePlainSMTP)
     REAL_CLIENTS["smtp"]("smtp.mail.me.com", 587, timeout=5.0)
 
     assert calls[0] == ("connect", "smtp.mail.me.com", 587, PUBLIC_IP, 5.0)
@@ -870,7 +875,7 @@ def test_smtp_on_587_without_starttls_does_not_continue_in_plaintext(monkeypatch
     closed: list = []
 
     class NoTlsSMTP:
-        def __init__(self, host, port, *, address, timeout=None):
+        def __init__(self, host, port, *, address, timeout=None, context=None):
             pass
 
         def ehlo(self):
@@ -882,7 +887,7 @@ def test_smtp_on_587_without_starttls_does_not_continue_in_plaintext(monkeypatch
         def close(self):
             closed.append(True)
 
-    monkeypatch.setattr(imap_basic, "_PinnedSMTP", NoTlsSMTP)
+    monkeypatch.setattr(imap_basic, "_open_smtp", NoTlsSMTP)
     with pytest.raises(smtplib.SMTPNotSupportedError):
         REAL_CLIENTS["smtp"]("smtp.example.test", 587, timeout=5.0)
     assert closed == [True]
@@ -1444,3 +1449,32 @@ def test_a_folder_with_a_space_or_an_accent_connects_and_is_polled(
     assert result["polled"] == 1
     assert FakeIMAP.instances[-1].selected_arg == f'"{on_server}"'
     assert repo.get_poll_state(account["id"])["folder"] == folder
+
+
+def test_the_module_imports_while_smtplib_is_replaced_by_a_tripwire(tmp_path):
+    """The dry-run tests swap ``smtplib.SMTP`` for a function before any backend loads.
+
+    A class statement subclassing it at import then raised a metaclass error,
+    which broke the backend registry for every mail backend.  A fresh
+    interpreter is used because this process has imported the module already.
+    """
+    import subprocess
+    import sys
+
+    backend_dir = Path(__file__).resolve().parents[2] / "backend"
+    code = "\n".join(
+        [
+            "import imaplib, smtplib",
+            "def tripwire(*a, **k):",
+            "    raise AssertionError('transport touched')",
+            "smtplib.SMTP = smtplib.SMTP_SSL = imaplib.IMAP4_SSL = tripwire",
+            "import dreamjob.mail.imap_basic",
+            "print('imported')",
+        ]
+    )
+    env = {**os.environ, "PYTHONPATH": str(backend_dir)}
+    run = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=120
+    )
+    assert run.returncode == 0, run.stderr[-2000:]
+    assert run.stdout.strip() == "imported"

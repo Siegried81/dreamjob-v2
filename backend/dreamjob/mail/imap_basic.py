@@ -502,8 +502,8 @@ def _tls_failed(host: str) -> str:
     )
 
 
-class _PinnedIMAP4_SSL(imaplib.IMAP4_SSL):
-    """``IMAP4_SSL`` that opens its socket to an address already checked.
+class _PinnedIMAPMixin:
+    """Open imaplib's socket to an address already checked.
 
     The certificate is still verified against the host *name* (``self.host``),
     so pinning the address changes where the packets go, not what is trusted.
@@ -513,9 +513,9 @@ class _PinnedIMAP4_SSL(imaplib.IMAP4_SSL):
     them rather than quietly reconnect by name.
     """
 
-    def __init__(self, host: str, port: int, *, address: str, ssl_context, timeout: float):
+    def __init__(self, host: str, port: int, *, address: str, **kwargs):
         self._pinned_address = address  # set before super(): __init__ connects
-        super().__init__(host, port, ssl_context=ssl_context, timeout=timeout)
+        super().__init__(host, port, **kwargs)
 
     def _create_socket(self, timeout):
         sock = socket.create_connection((self._pinned_address, self.port), timeout)
@@ -537,12 +537,29 @@ class _PinnedSMTPMixin:
         return super()._get_socket(self._pinned_address, port, timeout)
 
 
-class _PinnedSMTP(_PinnedSMTPMixin, smtplib.SMTP):
-    pass
+def _pinned(mixin: type, base: type) -> type:
+    """``base`` with ``mixin`` in front, built when a connection is opened.
+
+    Not at import: this module is loaded lazily by the backend registry, and a
+    class statement binds whatever ``smtplib.SMTP`` is at that moment - a test
+    tripwire standing in for it made the import itself fail, taking every mail
+    backend down with it.  Building per connection costs nothing next to the
+    TLS handshake.
+    """
+    return type(f"_Pinned{base.__name__}", (mixin, base), {})
 
 
-class _PinnedSMTP_SSL(_PinnedSMTPMixin, smtplib.SMTP_SSL):
-    pass
+def _open_smtp(
+    host: str, port: int, *, address: str, timeout: float, context: ssl.SSLContext | None = None
+) -> smtplib.SMTP:
+    """Plain SMTP (``context`` None, for STARTTLS) or implicit TLS, pinned to ``address``."""
+    if context is None:
+        return _pinned(_PinnedSMTPMixin, smtplib.SMTP)(
+            host, port, address=address, timeout=timeout
+        )
+    return _pinned(_PinnedSMTPMixin, smtplib.SMTP_SSL)(
+        host, port, address=address, context=context, timeout=timeout
+    )
 
 
 def _imap_client(host: str, port: int, *, timeout: float) -> imaplib.IMAP4_SSL:
@@ -551,7 +568,7 @@ def _imap_client(host: str, port: int, *, timeout: float) -> imaplib.IMAP4_SSL:
     Indirected so tests can substitute a fake server without a socket.
     """
     address = check_endpoint(host, port, kind="imap")
-    return _PinnedIMAP4_SSL(
+    return _pinned(_PinnedIMAPMixin, imaplib.IMAP4_SSL)(
         host, port, address=address, ssl_context=verified_context(), timeout=timeout
     )
 
@@ -566,7 +583,7 @@ def _smtp_client(host: str, port: int, *, timeout: float) -> smtplib.SMTP:
     address = check_endpoint(host, port, kind="smtp")
     context = verified_context()
     if port == SMTP_STARTTLS_PORT:
-        client = _PinnedSMTP(host, port, address=address, timeout=timeout)
+        client = _open_smtp(host, port, address=address, timeout=timeout)
         try:
             client.ehlo()
             client.starttls(context=context)
@@ -575,7 +592,7 @@ def _smtp_client(host: str, port: int, *, timeout: float) -> smtplib.SMTP:
             client.close()
             raise
         return client
-    return _PinnedSMTP_SSL(host, port, address=address, context=context, timeout=timeout)
+    return _open_smtp(host, port, address=address, timeout=timeout, context=context)
 
 
 def verify_credentials(
