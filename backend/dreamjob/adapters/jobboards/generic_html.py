@@ -78,7 +78,9 @@ from dreamjob.adapters.vacancy_source import (
 from dreamjob.db.connection import execute
 
 try:  # pragma: no cover
-    from selectolax.parser import HTMLParser
+    # selectolax 1.0 dropped the Modest backend (selectolax.parser.HTMLParser);
+    # the Lexbor parser exposes the same css/css_first/text/attributes API.
+    from selectolax.lexbor import LexborHTMLParser as HTMLParser
 except ImportError:  # pragma: no cover
     HTMLParser = None  # type: ignore[assignment]
 
