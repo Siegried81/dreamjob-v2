@@ -12,7 +12,7 @@ cd "$ROOT"
 if [ ! -f .env ]; then
   echo "No .env found. Copy .env.example to .env and fill it in:"
   echo "  cp .env.example .env"
-  echo "  python3 -m dreamjob.security.crypto --generate-key   # for the two key values"
+  echo "  PYTHONPATH=backend python3 -m dreamjob.security.crypto --generate-key   # for the two key values"
   exit 1
 fi
 

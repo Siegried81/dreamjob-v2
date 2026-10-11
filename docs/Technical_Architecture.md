@@ -310,10 +310,10 @@ the screens; `?` opens the panel anywhere.
 ## 6. Deployment
 
 ```bash
-cp .env.example .env
-python3 -m dreamjob.security.crypto --generate-key   # master key + session secret
 pip install -r requirements.txt
 cd frontend && npm install && cd ..
+cp .env.example .env
+PYTHONPATH=backend python3 -m dreamjob.security.crypto --generate-key   # master key + session secret, after the install
 ./scripts/dev.sh                       # API :8000, SPA :5173 with /api proxied
 ```
 
