@@ -1,0 +1,29 @@
+# Dependency version updates: monthly, one grouped PR per ecosystem, so a
+# library release does not turn into a PR of its own. Security updates are
+# enabled in the repository settings and arrive as soon as an advisory does,
+# independently of this schedule.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      python-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: monthly
+    groups:
+      frontend-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
