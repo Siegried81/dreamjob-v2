@@ -3,12 +3,26 @@
 FR-326 asks that bounces and replies be detected and reflected in the
 opportunity status.  Two mechanisms feed one set of rules:
 
-* **Polling**, for a connected Gmail mailbox.  ``poll_account`` reads what has
-  arrived since the last cursor - through the Gmail API with the
-  ``gmail.readonly`` scope Dream Job actually requests, or over IMAP with
-  :mod:`imaplib` when the mailbox already grants ``https://mail.google.com/``
-  (see :mod:`dreamjob.mail.gmail` for why that scope is not requested).
+* **Polling**, for any connected mailbox whose backend declares
+  ``reply_detection == "poll"``.  ``poll_account`` reads what has arrived since
+  the last cursor over one of two transports:
+
+  - the Gmail API, with the ``gmail.readonly`` scope Dream Job requests;
+  - IMAP with :mod:`imaplib`, for a ``gmail_oauth`` mailbox that already grants
+    ``https://mail.google.com/`` (see :mod:`dreamjob.mail.gmail` for why that
+    scope is not requested) and for every ``imap_basic`` mailbox - Yahoo,
+    iCloud, a self-hosted server - which authenticates with an application
+    password instead of a token (see :mod:`dreamjob.mail.imap_basic`).
+
+  Which backends are polled is read from the capabilities, never from a list of
+  names here, so :func:`poll_all` and the repository query both follow when a
+  backend is added.
 * **Webhooks**, for Resend, which has no mailbox to poll.
+
+Reading is all the poller does.  It records and classifies what arrived and
+never deletes, moves or flags anything - every IMAP session below is opened
+``readonly`` - and a message matching no dispatch Dream Job sent produces an
+``incoming_reply`` row, never an opportunity.
 
 Bounces are recognised structurally, not by reading subject lines.  A delivery
 failure is a delivery status notification (RFC 3464): a ``multipart/report``
@@ -34,21 +48,33 @@ import email.policy
 import imaplib
 import logging
 import re
+import ssl
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from email.message import EmailMessage
 from email.utils import getaddresses, parsedate_to_datetime
 from typing import Any
 
-from dreamjob.config import get_settings
 from dreamjob.db.connection import utcnow
 from dreamjob.db.repositories import contacts as contacts_repo
 from dreamjob.db.repositories import dispatch as repo
 from dreamjob.mail import composer
+from dreamjob.mail.base import (
+    MailBackendError,
+    MailBackendNotConfigured,
+    MailBackendUnavailable,
+    get_backend,
+    imap_mailbox,
+    pollable_backends,
+)
 from dreamjob.mail.tls import MAIL_SOCKET_TIMEOUT, verified_context
 from dreamjob.security.audit import record_audit
 
 log = logging.getLogger(__name__)
+
+#: Messages larger than this are skipped, not fetched: a reply or a bounce is a
+#: few kB, and the cap is the largest message the providers accept anyway.
+MAX_FETCH_BYTES = 25 * 1024 * 1024
 
 MESSAGE_ID_RE = re.compile(r"<[^<>@\s]+@[^<>\s]+>")
 
@@ -554,31 +580,67 @@ def apply_provider_event(event: dict, *, delivery_id: str, provider: str) -> dic
 def poll_account(account: dict, *, max_messages: int = 100) -> dict:
     """Read what has arrived in one mailbox since the last cursor.
 
-    Chooses the transport the mailbox can actually use: IMAP when the granted
-    scopes include full mailbox access, otherwise the Gmail API, which is what
-    the ``gmail.readonly`` scope Dream Job requests supports.
+    Two decisions, in order.  First, *can* this mailbox be polled at all - which
+    is the backend's own ``reply_detection`` capability, not its name, so a
+    relay that reports by webhook is skipped with a reason rather than being
+    constructed and failed.  Then, which transport: the Gmail API for a
+    ``gmail_oauth`` mailbox holding only ``gmail.readonly``, and IMAP for every
+    other pollable mailbox - a Gmail that granted full mailbox access, or an
+    ``imap_basic`` mailbox, which has no scopes and always speaks IMAP.
     """
-    from dreamjob.mail.gmail import IMAP_SCOPE, GmailBackend  # noqa: PLC0415
+    from dreamjob.mail.base import backend_class  # noqa: PLC0415 - avoids a cycle
+    from dreamjob.mail.gmail import IMAP_SCOPE  # noqa: PLC0415
 
-    if account.get("backend") != "gmail_oauth":
+    key = str(account.get("backend") or "")
+    try:
+        capabilities = backend_class(key).capabilities
+    except MailBackendError as exc:
+        return {"account_id": account.get("id"), "polled": 0, "skipped": str(exc)}
+    if capabilities.reply_detection != "poll":
         return {
             "account_id": account.get("id"),
             "polled": 0,
-            "skipped": f"{account.get('backend')} has no mailbox to poll; it reports by webhook",
+            "skipped": f"{key} has no mailbox to poll; it reports by {capabilities.bounce_detection}",
         }
 
-    backend = GmailBackend(account)
+    backend = get_backend(key, account)
     scopes = set(str(account.get("scopes") or "").split())
+    # A mailbox that authenticates with a password has no scopes to inspect and
+    # no API to fall back to, so IMAP is the only transport it has.
+    use_imap = capabilities.requires_oauth is False or IMAP_SCOPE in scopes
     try:
-        if IMAP_SCOPE in scopes:
+        if use_imap:
             result = poll_imap(account, backend, max_messages=max_messages)
         else:
             result = poll_gmail_api(account, backend, max_messages=max_messages)
     except Exception as exc:  # noqa: BLE001 - a failing mailbox must not stop the job
-        log.exception("Polling mailbox %s failed", account.get("address"))
-        repo.save_poll_state(account["id"], {"last_error": str(exc)[:500]})
-        return {"account_id": account["id"], "polled": 0, "error": str(exc)[:500]}
+        log.warning(
+            "Polling mailbox %s failed: %s", account.get("id"), type(exc).__name__
+        )
+        message = _public_poll_error(exc)
+        repo.save_poll_state(account["id"], {"last_error": message})
+        return {"account_id": account["id"], "polled": 0, "error": message}
     return result
+
+
+def _public_poll_error(exc: Exception) -> str:
+    """A fixed sentence for a failed poll, safe to store and to show.
+
+    The exception text is not used: it can carry the server's own words, which
+    for a user-named host turns the poll result into a probe of that host, and
+    ``last_error`` is shown back to the client.  The type is logged instead.
+    """
+    if isinstance(exc, ssl.SSLError):
+        return "TLS handshake with the mail server failed."
+    if isinstance(exc, MailBackendNotConfigured):
+        return "The mailbox is not connected or its credential was refused; reconnect it."
+    if isinstance(exc, imaplib.IMAP4.error):
+        return "The IMAP server refused the sign-in or the folder."
+    if isinstance(exc, (OSError, MailBackendUnavailable)):
+        return "The mail server was unreachable or timed out."
+    if isinstance(exc, MailBackendError):
+        return "The mailbox settings were refused (host, port or folder); reconnect it."
+    return f"Polling failed ({type(exc).__name__})."
 
 
 def poll_gmail_api(account: dict, backend: Any, *, max_messages: int = 100) -> dict:
@@ -631,17 +693,33 @@ def poll_imap(
 ) -> dict:
     """Poll over IMAP with :mod:`imaplib`, resuming from the stored UID.
 
+    Host, port and credential all come from the backend
+    (:meth:`imap_endpoint` or :meth:`open_imap`, and :meth:`imap_password`)
+    rather than from the global
+    settings, which is what lets one installation poll a Gmail over XOAUTH2 and
+    a Yahoo over an application password at the same time.  A backend answering
+    ``None`` for the password gets XOAUTH2, which is Gmail's way.
+
     UIDVALIDITY is checked first: when the server changes it the stored UIDs no
     longer mean anything and the cursor has to be dropped rather than trusted,
     which is the difference between resuming and silently reading nothing ever
     again.
     """
-    settings = get_settings()
     state = repo.get_poll_state(account["id"]) or {}
     address = str(account.get("address") or "")
-
-    client = imaplib.IMAP4_SSL(settings.imap_host, settings.imap_port,
-                               ssl_context=verified_context(), timeout=MAIL_SOCKET_TIMEOUT)
+    if password is None:
+        password = backend.imap_password()
+    # A backend that connects user-chosen hosts (imap_basic) opens the session
+    # itself, pinned to the address its host check approved; the operator's
+    # Gmail host is connected by name.
+    opener = getattr(backend, "open_imap", None)
+    if callable(opener):
+        client = opener(MAIL_SOCKET_TIMEOUT)
+    else:
+        host, port = backend.imap_endpoint()
+        client = imaplib.IMAP4_SSL(
+            host, port, ssl_context=verified_context(), timeout=MAIL_SOCKET_TIMEOUT
+        )
     try:
         if password:
             client.login(address, password)
@@ -650,10 +728,15 @@ def poll_imap(
             client.authenticate(
                 "XOAUTH2", lambda _challenge: _xoauth2_string(address, token).encode()
             )
-        folder = state.get("folder") or "INBOX"
-        client.select(folder, readonly=True)
+        # A backend that carries its own folder (imap_basic) is authoritative;
+        # otherwise the cursor's folder is kept.  UIDs only mean something
+        # within one folder, so a folder change drops the cursor.
+        folder = _backend_folder(backend) or state.get("folder") or "INBOX"
+        if state.get("folder") and state["folder"] != folder:
+            state = {**state, "last_uid": None, "uid_validity": None}
+        client.select(imap_mailbox(folder), readonly=True)
 
-        typ, data = client.status(folder, "(UIDVALIDITY)")
+        typ, data = client.status(imap_mailbox(folder), "(UIDVALIDITY)")
         validity = ""
         if typ == "OK" and data:
             match = re.search(rb"UIDVALIDITY (\d+)", data[0] or b"")
@@ -671,6 +754,11 @@ def poll_imap(
         seen = 0
         highest = last_uid
         for uid in uids:
+            size = _message_size(client, uid)
+            if size is not None and size > MAX_FETCH_BYTES:
+                log.info("Skipping UID %s on %s: %s bytes", uid, account.get("id"), size)
+                highest = max(highest, uid)
+                continue
             typ, payload = client.uid("FETCH", str(uid), "(RFC822)")
             if typ != "OK" or not payload or not isinstance(payload[0], tuple):
                 continue
@@ -702,9 +790,33 @@ def poll_imap(
             pass
 
 
+def _message_size(client: Any, uid: int) -> int | None:
+    """The server's ``RFC822.SIZE`` for one UID, or ``None`` when it does not say."""
+    typ, data = client.uid("FETCH", str(uid), "(RFC822.SIZE)")
+    if typ != "OK" or not data:
+        return None
+    for part in data:
+        line = part[0] if isinstance(part, tuple) else part
+        match = re.search(rb"RFC822\.SIZE (\d+)", line or b"")
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def _backend_folder(backend: Any) -> str:
+    """The folder a backend wants read, for backends that carry one."""
+    getter = getattr(backend, "imap_folder", None)
+    return str(getter()) if callable(getter) else ""
+
+
 def poll_all(job_seeker_id: str | None = None, *, max_messages: int = 100) -> list[dict]:
-    """Poll every connected mailbox; one failure does not stop the others."""
-    accounts = repo.accounts_to_poll("gmail_oauth")
+    """Poll every connected mailbox; one failure does not stop the others.
+
+    The backend list comes from the capabilities (:func:`pollable_backends`), so
+    a job seeker with both a Gmail and a Yahoo connected has both read on one
+    call and neither is forgotten here when a backend is added.
+    """
+    accounts = repo.accounts_to_poll(pollable_backends())
     if job_seeker_id:
         accounts = [a for a in accounts if a["job_seeker_id"] == job_seeker_id]
     return [poll_account(a, max_messages=max_messages) for a in accounts]

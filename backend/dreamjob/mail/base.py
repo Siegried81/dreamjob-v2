@@ -11,6 +11,16 @@ explicit rather than hidden:
     the delivery-status notifications - the only backend that meets section 2.4
     in full.
 
+``imap_basic``
+    Any mailbox that speaks IMAP and SMTP with an address and an application
+    password - Yahoo, iCloud, Outlook, a self-hosted server.  It meets section
+    2.4 exactly as ``gmail_oauth`` does (the message leaves the job seeker's
+    own mailbox, so replies and delivery-status notifications land in their own
+    inbox); the difference is only in how the mailbox is authorised.  It exists
+    because OAuth is not on offer everywhere: Yahoo, for one, has no public
+    OAuth programme for third-party mail clients, and an application password
+    is the credential it issues instead.
+
 ``resend``
     A transactional relay on ``stepvda.com``.  It sends when no personal
     mailbox is connected; ``Reply-To`` still points at the job seeker, but the
@@ -26,6 +36,8 @@ Gmail?".
 
 from __future__ import annotations
 
+import base64
+import json
 import mimetypes
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -50,6 +62,107 @@ class MailBackendNotConfigured(MailBackendError):
 
 class MailBackendUnavailable(MailBackendError):
     """The provider was reachable but refused or errored; retrying may work."""
+
+
+# ---------------------------------------------------------------------------
+# IMAP arguments
+# ---------------------------------------------------------------------------
+
+
+def imap_mailbox(name: str) -> str:
+    """A folder name as the single IMAP argument ``SELECT`` and ``STATUS`` expect.
+
+    :mod:`imaplib` sends arguments verbatim and in ASCII, so ``Sent Items``
+    reached the server as two arguments and was refused, and ``Boîte de
+    réception`` raised before anything was sent.  The name is therefore encoded
+    in IMAP's modified UTF-7 (RFC 3501 §5.1.3: ``&`` becomes ``&-``, anything
+    outside printable ASCII becomes ``&<base64 of UTF-16BE, "," for "/">-``)
+    and wrapped in a quoted string.  Quotes, backslashes and line breaks are
+    refused rather than escaped: no real folder needs them, and refusing keeps
+    the quoted string impossible to break out of.
+    """
+    if any(c in name for c in '"\\\r\n\0'):
+        raise MailBackendError("The folder name contains a character IMAP cannot carry.")
+    out: list[str] = []
+    pending: list[str] = []
+
+    def flush() -> None:
+        if pending:
+            raw = "".join(pending).encode("utf-16-be")
+            out.append("&" + base64.b64encode(raw).decode("ascii").rstrip("=").replace("/", ",") + "-")
+            pending.clear()
+
+    for char in name:
+        if 0x20 <= ord(char) <= 0x7E:
+            flush()
+            out.append("&-" if char == "&" else char)
+        else:
+            pending.append(char)
+    flush()
+    return '"' + "".join(out) + '"'
+
+
+# ---------------------------------------------------------------------------
+# Credentials at rest (NFR-204)
+# ---------------------------------------------------------------------------
+
+#: One crypto purpose for every mailbox credential.  ``crypto.encrypt`` binds
+#: both the purpose and the per-seeker scope into the derived key, so a blob
+#: written for one job seeker's mailbox cannot be read as another's - and the
+#: purpose keeps mailbox credentials separate from profile documents, which use
+#: the same master key under a different purpose.
+CRYPTO_PURPOSE = "mail"
+
+
+def encrypt_credentials(credentials: dict, job_seeker_id: str, *, what: str = "mailbox") -> bytes:
+    """Seal a credential dict for storage in ``mail_account.credentials_enc``.
+
+    Refusing to store anything when no master key is set is deliberate: NFR-204
+    requires mailbox credentials to be encrypted at rest, and a plaintext
+    fallback would quietly break that the first time someone ran without a key.
+    """
+    from dreamjob.security.crypto import CryptoUnavailable, encrypt  # noqa: PLC0415
+
+    try:
+        return encrypt(
+            json.dumps(credentials).encode("utf-8"), purpose=CRYPTO_PURPOSE, scope=job_seeker_id
+        )
+    except CryptoUnavailable as exc:
+        raise MailBackendError(
+            f"Cannot store the {what} credential: DREAMJOB_MASTER_KEY is not set, and NFR-204 "
+            "requires mailbox credentials to be encrypted at rest. Generate one with "
+            "`python -m dreamjob.security.crypto --generate-key` and restart."
+        ) from exc
+
+
+def decrypt_credentials(
+    blob: bytes | None,
+    job_seeker_id: str,
+    *,
+    what: str = "mailbox",
+    reconnect_hint: str = "Open Settings > Mail and connect it again.",
+) -> dict:
+    """Open a stored credential.  Raises with something the job seeker can act on.
+
+    A wrong master key and a corrupted blob are indistinguishable from here -
+    both are an AES-GCM tag failure - so they share one message that names the
+    likely cause and the fix.
+    """
+    from dreamjob.security.crypto import CryptoUnavailable, decrypt  # noqa: PLC0415
+
+    if not blob:
+        raise MailBackendNotConfigured(f"This {what} is not connected. {reconnect_hint}")
+    try:
+        return json.loads(decrypt(bytes(blob), purpose=CRYPTO_PURPOSE, scope=job_seeker_id))
+    except CryptoUnavailable as exc:
+        raise MailBackendError(
+            f"DREAMJOB_MASTER_KEY is not set, so the stored {what} credential cannot be decrypted."
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 - a wrong key looks exactly like corruption
+        raise MailBackendError(
+            f"The stored {what} credential could not be decrypted (wrong master key, or it was "
+            f"written under a different one). {reconnect_hint}"
+        ) from exc
 
 
 @dataclass(frozen=True)
@@ -236,6 +349,16 @@ def backend_for_account(account: dict) -> MailBackend:
     return get_backend(account["backend"], account)
 
 
+def pollable_backends() -> list[str]:
+    """Backend keys whose mailbox the inbox poller can read (FR-326).
+
+    Derived from the capability rather than listed by hand, so adding a backend
+    that polls does not mean remembering to edit the poller and the repository
+    query as well.
+    """
+    return [c.key for c in all_capabilities() if c.reply_detection == "poll"]
+
+
 def all_capabilities() -> list[BackendCapabilities]:
     _load_backends()
     return [cls.capabilities for cls in _REGISTRY.values()]
@@ -258,4 +381,4 @@ def _load_backends() -> None:
     if _LOADED:
         return
     _LOADED = True
-    from dreamjob.mail import gmail, resend_backend  # noqa: F401,PLC0415
+    from dreamjob.mail import gmail, imap_basic, resend_backend  # noqa: F401,PLC0415
