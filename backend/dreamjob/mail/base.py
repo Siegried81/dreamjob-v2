@@ -11,6 +11,16 @@ explicit rather than hidden:
     the delivery-status notifications - the only backend that meets section 2.4
     in full.
 
+``imap_basic``
+    Any mailbox that speaks IMAP and SMTP with an address and an application
+    password - Yahoo, iCloud, Outlook, a self-hosted server.  It meets section
+    2.4 exactly as ``gmail_oauth`` does (the message leaves the job seeker's
+    own mailbox, so replies and delivery-status notifications land in their own
+    inbox); the difference is only in how the mailbox is authorised.  It exists
+    because OAuth is not on offer everywhere: Yahoo, for one, has no public
+    OAuth programme for third-party mail clients, and an application password
+    is the credential it issues instead.
+
 ``resend``
     A transactional relay on ``stepvda.com``.  It sends when no personal
     mailbox is connected; ``Reply-To`` still points at the job seeker, but the
@@ -26,7 +36,9 @@ Gmail?".
 
 from __future__ import annotations
 
+import json
 import mimetypes
+import ssl
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -50,6 +62,89 @@ class MailBackendNotConfigured(MailBackendError):
 
 class MailBackendUnavailable(MailBackendError):
     """The provider was reachable but refused or errored; retrying may work."""
+
+
+# ---------------------------------------------------------------------------
+# TLS for the mail transports
+# ---------------------------------------------------------------------------
+
+
+def verified_tls_context() -> ssl.SSLContext:
+    """A TLS context that checks the certificate and the host name, TLS 1.2 or later.
+
+    Passed explicitly to every ``IMAP4_SSL``, ``SMTP_SSL`` and ``starttls`` call,
+    because :mod:`imaplib` and :mod:`smtplib` default to
+    ``ssl._create_stdlib_context()``, which verifies nothing: without this an
+    application password would be handed to whoever answers on the port.
+    """
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.check_hostname = True
+    context.verify_mode = ssl.CERT_REQUIRED
+    return context
+
+
+# ---------------------------------------------------------------------------
+# Credentials at rest (NFR-204)
+# ---------------------------------------------------------------------------
+
+#: One crypto purpose for every mailbox credential.  ``crypto.encrypt`` binds
+#: both the purpose and the per-seeker scope into the derived key, so a blob
+#: written for one job seeker's mailbox cannot be read as another's - and the
+#: purpose keeps mailbox credentials separate from profile documents, which use
+#: the same master key under a different purpose.
+CRYPTO_PURPOSE = "mail"
+
+
+def encrypt_credentials(credentials: dict, job_seeker_id: str, *, what: str = "mailbox") -> bytes:
+    """Seal a credential dict for storage in ``mail_account.credentials_enc``.
+
+    Refusing to store anything when no master key is set is deliberate: NFR-204
+    requires mailbox credentials to be encrypted at rest, and a plaintext
+    fallback would quietly break that the first time someone ran without a key.
+    """
+    from dreamjob.security.crypto import CryptoUnavailable, encrypt  # noqa: PLC0415
+
+    try:
+        return encrypt(
+            json.dumps(credentials).encode("utf-8"), purpose=CRYPTO_PURPOSE, scope=job_seeker_id
+        )
+    except CryptoUnavailable as exc:
+        raise MailBackendError(
+            f"Cannot store the {what} credential: DREAMJOB_MASTER_KEY is not set, and NFR-204 "
+            "requires mailbox credentials to be encrypted at rest. Generate one with "
+            "`python -m dreamjob.security.crypto --generate-key` and restart."
+        ) from exc
+
+
+def decrypt_credentials(
+    blob: bytes | None,
+    job_seeker_id: str,
+    *,
+    what: str = "mailbox",
+    reconnect_hint: str = "Open Settings > Mail and connect it again.",
+) -> dict:
+    """Open a stored credential.  Raises with something the job seeker can act on.
+
+    A wrong master key and a corrupted blob are indistinguishable from here -
+    both are an AES-GCM tag failure - so they share one message that names the
+    likely cause and the fix.
+    """
+    from dreamjob.security.crypto import CryptoUnavailable, decrypt  # noqa: PLC0415
+
+    if not blob:
+        raise MailBackendNotConfigured(f"This {what} is not connected. {reconnect_hint}")
+    try:
+        return json.loads(decrypt(bytes(blob), purpose=CRYPTO_PURPOSE, scope=job_seeker_id))
+    except CryptoUnavailable as exc:
+        raise MailBackendError(
+            f"DREAMJOB_MASTER_KEY is not set, so the stored {what} credential cannot be decrypted."
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 - a wrong key looks exactly like corruption
+        raise MailBackendError(
+            f"The stored {what} credential could not be decrypted (wrong master key, or it was "
+            f"written under a different one). {reconnect_hint}"
+        ) from exc
 
 
 @dataclass(frozen=True)
@@ -236,6 +331,16 @@ def backend_for_account(account: dict) -> MailBackend:
     return get_backend(account["backend"], account)
 
 
+def pollable_backends() -> list[str]:
+    """Backend keys whose mailbox the inbox poller can read (FR-326).
+
+    Derived from the capability rather than listed by hand, so adding a backend
+    that polls does not mean remembering to edit the poller and the repository
+    query as well.
+    """
+    return [c.key for c in all_capabilities() if c.reply_detection == "poll"]
+
+
 def all_capabilities() -> list[BackendCapabilities]:
     _load_backends()
     return [cls.capabilities for cls in _REGISTRY.values()]
@@ -258,4 +363,4 @@ def _load_backends() -> None:
     if _LOADED:
         return
     _LOADED = True
-    from dreamjob.mail import gmail, resend_backend  # noqa: F401,PLC0415
+    from dreamjob.mail import gmail, imap_basic, resend_backend  # noqa: F401,PLC0415
