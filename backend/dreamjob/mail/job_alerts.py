@@ -56,7 +56,6 @@ from datetime import datetime, timedelta
 from email.message import EmailMessage
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import urlparse
 
 from dreamjob.adapters.base import NormalisedRecord
 from dreamjob.adapters.vacancy_source import (
