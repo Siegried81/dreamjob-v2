@@ -275,6 +275,11 @@ The scheduler runs inside the API process and stops with it. On Windows, if it
 must survive API restarts, set `DREAMJOB_SCHEDULER_ENABLED=0` and run
 `python -m dreamjob.monitoring.scheduler --once` from Task Scheduler instead.
 
+To know whether the job-alert mails in your mailbox can be deleted, run
+`PYTHONPATH=backend python scripts/ingest_alerts.py`: it backs every alert mail
+of the window up as `.eml` under `data/alerts_backup/`, runs one pass, and ends
+with one line naming the cursor date before which deleting is safe.
+
 ---
 
 ## Using it
