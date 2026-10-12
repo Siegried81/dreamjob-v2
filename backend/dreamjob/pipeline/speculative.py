@@ -46,7 +46,7 @@ from dreamjob.db.repositories import campaigns as campaign_repo
 from dreamjob.db.repositories import opportunities as repo
 from dreamjob.llm.client import BudgetExhausted, LLMClient, LLMError, redact
 from dreamjob.pipeline import directives as dir_mod
-from dreamjob.pipeline import locate, scoring
+from dreamjob.pipeline import employer_product, locate, scoring
 from dreamjob.pipeline import signals as signals_mod
 from dreamjob.pipeline.enrichment import load_prompt
 from dreamjob.pipeline.opportunities import (
@@ -519,9 +519,12 @@ def candidate_companies(
     """Interesting companies with no matching vacancy, best-ranked first (FR-262).
 
     "Interesting" is every company this campaign touched plus the seeker's
-    watchlist, minus the ones a vacancy already covers and minus anything the
-    directives exclude.  The order is the deterministic attractiveness prior, so
-    the NFR-104 cut always removes the *low-ranked* companies.
+    watchlist, minus the ones a vacancy already covers, minus anything the
+    directives exclude, and minus every agency or job board (FR-341): an
+    opening "at" an intermediary would be an invented job at the wrong
+    organisation, written as if its client were known.  The order is the
+    deterministic attractiveness prior, so the NFR-104 cut always removes the
+    *low-ranked* companies.
     """
     campaign_id = campaign["id"]
     covered = repo.companies_with_vacancy_opportunity(
@@ -535,7 +538,8 @@ def candidate_companies(
         )
         if cid not in covered
     ]
-    companies = repo.companies_by_ids(ids)
+    intermediaries = employer_product.intermediary_company_ids(ids, campaign["job_seeker_id"])
+    companies = repo.companies_by_ids([cid for cid in ids if cid not in intermediaries])
     if directive_set is not None:
         companies = [c for c in companies if not dir_mod.is_excluded(directive_set, c)]
     ranked = [(scoring.company_attractiveness(c["id"], company=c).value, c) for c in companies]

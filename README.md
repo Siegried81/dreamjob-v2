@@ -410,9 +410,12 @@ Stated rather than glossed:
   encryption. SQLCipher would add a dependency.
 - **France and Germany** have no financial-registry adapter; companies there take
   the estimated path.
-- **Employer-kind enforcement is partly wired** — scoring excludes an
-  intermediary's company dimensions, but company profiling and financial passes
-  do not yet skip an agency outright.
+- **Employer-kind enforcement covers new work, not old scores.** Scoring
+  excludes an intermediary's company dimensions, and the company-profiling,
+  financial and speculative-opening passes skip a company whose role is agency
+  or job board. Opportunity rows scored before a company was tagged keep their
+  old company sub-score until they are re-scored; there is no automatic
+  backfill.
 - **Semantic search is built but not consumed** by scoring or the API yet.
 - **Microsoft 365 mail is not implemented**, and the Microsoft 365 calendar
   Graph client cannot be connected because its OAuth exchange is not exposed.

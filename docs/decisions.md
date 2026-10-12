@@ -119,3 +119,24 @@ enrichment consent, and now go to the provider the administrator chose
 instead. The request shape per provider lives once, in
 `email_patterns.provider_query`, shared with the contacts search.
 
+## 2026-10-12 — research passes skip agencies and job boards
+
+**What changed.** `company_profile.rerun`, `financial.rerun`,
+`financial.financial_worker` and `speculative.candidate_companies` now drop
+every company whose effective employer role is `agency` or `board`
+(`employer_product.intermediary_company_ids`, the seeker's own correction
+applied as on the badge). Unresearched and `unverified` companies still pass.
+
+**What a number means.** In the re-run reports, `companies` now counts the
+companies actually worked on, and the new `skipped_intermediaries` counts the
+ones left out; before, an agency was counted and profiled like any employer.
+No score changes: scoring already refused an intermediary's company
+dimensions, and stored profiles and filings are left as they are.
+
+**Why.** `docs/Employer_Kind_Results.md` §7 item 5: the gates existed in the
+repository and nothing called them, so an agency could still be crawled,
+pitched a speculative opening and have its accounts collected.
+
+**What would reverse it.** Dropping the call in one of the four passes; the
+helper fails open (an unreadable verdict table skips nothing).
+

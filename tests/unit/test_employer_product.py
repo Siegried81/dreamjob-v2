@@ -1050,3 +1050,180 @@ def test_the_role_listing_is_what_the_gates_and_the_list_filter_read(client, tag
     assert body["employers"][0]["service_model"] == "temp_agency"
     assert body["employers"][0]["vacancy_count"] == 1
     assert client.get("/api/employers", params={"role": "nonsense"}).status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# The research gates: an intermediary is not profiled, analysed or pitched to
+# ---------------------------------------------------------------------------
+
+
+def test_gate_names_the_agency_and_lets_the_employer_and_the_unknown_through(tagged, world):
+    from dreamjob.db.connection import insert_row, utcnow
+    from dreamjob.pipeline import employer_product as emp
+
+    unresearched = insert_row(
+        "company",
+        {"normalised_name": "nobody looked", "name": "Nobody Looked BV", "country": "BE",
+         "collected_at": utcnow()},
+    )
+    ids = [tagged["agency_company_id"], tagged["direct_company_id"], unresearched]
+
+    assert emp.intermediary_company_ids(ids, world["seeker_id"]) == {
+        tagged["agency_company_id"]
+    }
+    assert emp.intermediary_company_ids([], world["seeker_id"]) == set()
+
+
+def test_gate_follows_the_seekers_own_correction_and_nobody_elses(tagged, world):
+    from dreamjob.db.repositories import employer_kind as kind_repo
+    from dreamjob.pipeline import employer_product as emp
+
+    kind_repo.record_correction(
+        tagged["direct_company_id"], world["seeker_id"], "agency", "They placed me at a client."
+    )
+    ids = [tagged["direct_company_id"]]
+
+    assert emp.intermediary_company_ids(ids, world["seeker_id"]) == {ids[0]}
+    assert emp.intermediary_company_ids(ids, world["other_seeker_id"]) == set()
+
+
+def test_gate_fails_open_when_the_verdicts_cannot_be_read(tagged, monkeypatch):
+    from dreamjob.db.repositories import employer_kind as kind_repo
+    from dreamjob.pipeline import employer_product as emp
+
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("no such table")
+
+    monkeypatch.setattr(kind_repo, "badges", broken)
+
+    assert emp.intermediary_company_ids([tagged["agency_company_id"]]) == set()
+
+
+def test_gate_profiling_skips_an_agency_outright(tagged, world, monkeypatch):
+    import asyncio
+
+    from dreamjob.pipeline import company_profile
+
+    refreshed: list[str] = []
+
+    async def fake_refresh(company_id, **_kwargs):
+        refreshed.append(company_id)
+        return {"profile": {}, "signals": {"count": 0}, "competitors": {"count": 0}}
+
+    monkeypatch.setattr(company_profile, "refresh_company", fake_refresh)
+    ids = [tagged["agency_company_id"], tagged["direct_company_id"]]
+
+    report = asyncio.run(
+        company_profile.rerun(world["campaign_id"], world["seeker_id"], company_ids=ids)
+    )
+
+    assert refreshed == [tagged["direct_company_id"]]
+    assert report["companies"] == 1
+    assert report["skipped_intermediaries"] == 1
+
+
+def test_gate_financial_rerun_never_collects_an_agencys_accounts(tagged, world, monkeypatch):
+    import asyncio
+
+    from dreamjob.pipeline import financial
+
+    analysed: list[str] = []
+
+    def fake_analyse(company_id, **_kwargs):
+        analysed.append(company_id)
+        return {"entity": {"is_estimated": True}}
+
+    ids = [tagged["agency_company_id"], tagged["direct_company_id"]]
+    monkeypatch.setattr(financial, "campaign_companies", lambda *_a, **_k: list(ids))
+    monkeypatch.setattr(financial, "analyse_company", fake_analyse)
+
+    report = asyncio.run(
+        financial.rerun(world["campaign_id"], world["seeker_id"], collect=False)
+    )
+
+    assert analysed == [tagged["direct_company_id"]]
+    assert report["companies"] == 1
+    assert report["skipped_intermediaries"] == 1
+
+
+def test_gate_financial_worker_steps_over_an_agency(tagged, world, monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    from dreamjob.egress import client as egress_client
+    from dreamjob.pipeline import financial
+
+    collected: list[str] = []
+
+    async def fake_collect(company, **_kwargs):
+        collected.append(company["id"])
+        return {}
+
+    class _NoEgress:
+        async def __aenter__(self):
+            return None
+
+        async def __aexit__(self, *_exc):
+            return False
+
+    async def _barrier():
+        return None
+
+    checkpoint = {
+        "company_ids": [tagged["agency_company_id"], tagged["direct_company_id"]],
+        "done": 0,
+    }
+    ctx = SimpleNamespace(
+        checkpoint=checkpoint,
+        campaign_id=world["campaign_id"],
+        job_seeker_id=world["seeker_id"],
+        save_checkpoint=lambda **kw: checkpoint.update(kw),
+        progress=lambda *_a: None,
+        checkpoint_barrier=_barrier,
+        record_error=lambda *_a: None,
+    )
+    monkeypatch.setattr(egress_client, "EgressClient", _NoEgress)
+    monkeypatch.setattr(financial, "collect_company_financials", fake_collect)
+    monkeypatch.setattr(financial, "analyse_company", lambda *_a, **_k: {})
+
+    asyncio.run(financial.financial_worker(ctx))
+
+    assert collected == [tagged["direct_company_id"]]
+    assert checkpoint["done"] == 2, "the agency is passed over, not left as unfinished work"
+
+
+def test_gate_no_speculative_opening_is_invented_at_an_agency(tagged, world, monkeypatch):
+    from dreamjob.db.repositories import campaigns as campaign_repo
+    from dreamjob.pipeline import speculative
+
+    ids = [tagged["agency_company_id"], tagged["direct_company_id"]]
+    monkeypatch.setattr(speculative.repo, "campaign_company_ids", lambda *_a: list(ids))
+    monkeypatch.setattr(
+        speculative.repo, "companies_with_vacancy_opportunity", lambda *_a, **_k: set()
+    )
+    campaign = campaign_repo.get_campaign(world["campaign_id"], world["seeker_id"])
+
+    names = [c["id"] for c in speculative.candidate_companies(campaign)]
+
+    assert names == [tagged["direct_company_id"]]
+
+
+def test_gate_says_so_when_only_agencies_were_in_scope(tagged, world, monkeypatch):
+    import asyncio
+
+    from dreamjob.pipeline import company_profile, financial
+
+    monkeypatch.setattr(financial, "campaign_companies",
+                        lambda *_a, **_k: [tagged["agency_company_id"]])
+
+    profiled = asyncio.run(company_profile.rerun(
+        world["campaign_id"], world["seeker_id"], company_ids=[tagged["agency_company_id"]]
+    ))
+    analysed = asyncio.run(
+        financial.rerun(world["campaign_id"], world["seeker_id"], collect=False)
+    )
+
+    for report in (profiled, analysed):
+        assert report["companies"] == 0
+        assert report["skipped_intermediaries"] == 1
+        assert "agency or a job board" in report["note"]

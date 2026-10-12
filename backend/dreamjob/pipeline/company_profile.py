@@ -978,11 +978,23 @@ async def rerun(campaign_id: str, job_seeker_id: str, **options: Any) -> dict[st
         companies = [str(c) for c in named if c][:limit]
     else:
         companies = campaign_companies(campaign_id, limit=limit, include_fresh=force)
+    # An agency or job board is not the employer: its site says nothing about
+    # the client the vacancy is for, so it is not crawled or profiled at all
+    # (FR-341).  The skipped ids are reported, not silently dropped.
+    from dreamjob.pipeline import employer_product  # noqa: PLC0415 - avoids a cycle
+
+    intermediaries = employer_product.intermediary_company_ids(companies, job_seeker_id)
+    companies = [c for c in companies if c not in intermediaries]
     if not companies:
         return {
             "companies": 0,
             "profiled": 0,
-            "note": "No company is in scope yet; collection has produced none",
+            "skipped_intermediaries": len(intermediaries),
+            "note": (
+                "Every company in scope is an agency or a job board; none was profiled"
+                if intermediaries
+                else "No company is in scope yet; collection has produced none"
+            ),
         }
 
     use_llm = bool(options.get("use_llm", True))
@@ -994,6 +1006,7 @@ async def rerun(campaign_id: str, job_seeker_id: str, **options: Any) -> dict[st
         "signals": 0,
         "competitors": 0,
         "failed": 0,
+        "skipped_intermediaries": len(intermediaries),
     }
     for company_id in companies:
         try:
