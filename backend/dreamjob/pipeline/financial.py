@@ -58,6 +58,7 @@ DEFAULT_YEARS = 5
 REGISTRIES_BY_JURISDICTION: dict[str, list[str]] = {
     "BE": ["registry.kbo", "registry.nbb"],
     "NL": ["registry.kvk"],
+    "FR": ["registry.recherche_entreprises"],
     "GB": ["registry.companies_house"],
     "UK": ["registry.companies_house"],
     "US": ["registry.sec_edgar"],

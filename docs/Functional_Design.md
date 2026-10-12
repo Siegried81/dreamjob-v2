@@ -270,13 +270,13 @@ stored with the installation's other settings.
 
 ### 6.3 Collection (FR-181–FR-186)
 
-**Twenty-nine adapters** over a common four-step contract:
+**Thirty-six adapters** over a common four-step contract:
 
 | Type | Count | Sources |
 |---|---|---|
 | ATS | 9 | Greenhouse, Lever, SmartRecruiters, Ashby, Recruitee, Personio, Workday, Teamtailor, Workable |
-| Job boards | 9 | EURES, VDAB, Actiris, Jobat, StepStone, Indeed, Welcome to the Jungle, Arbeitnow, generic HTML |
-| Registries | 5 | NBB, KBO/BCE, Companies House, KvK, SEC EDGAR |
+| Job boards | 15 | EURES, VDAB, Actiris, Jobat, StepStone, Indeed, Welcome to the Jungle, Arbeitnow, generic HTML, Adzuna, Himalayas, Hacker News "Who is hiring", Jobicy, RemoteOK, Remotive |
+| Registries | 6 | NBB, KBO/BCE, Companies House, KvK, SEC EDGAR, recherche-entreprises (FR) |
 | Directories | 1 | OpenCorporates |
 | Website | 1 | Bounded company-site crawler |
 | News / events | 3 | RSS newsrooms, event radar, social event calendars |
@@ -435,11 +435,17 @@ figure. Balance-sheet totals and sign conventions are reconciled and
 inconsistencies flagged rather than silently accepted (NFR-404).
 
 > **Decision (OQ-01).** Belgium is first-class (NBB + KBO), with the UK
-> (Companies House), the Netherlands (KvK), the US (SEC EDGAR) and
-> OpenCorporates implemented to the same contract. France (Infogreffe) and
-> Germany (Bundesanzeiger) are **not** implemented; companies in those
-> jurisdictions fall through to the FR-245 estimated path. Adding them is a new
-> adapter and no pipeline change.
+> (Companies House), the Netherlands (KvK), the US (SEC EDGAR), France
+> (recherche-entreprises.api.gouv.fr) and OpenCorporates implemented to the
+> same contract. The French source is the State's free, keyless API over Sirene
+> and the RNE: identity, NAF code, headcount band and, where accounts are
+> published, revenue and net result - never a balance sheet, so the
+> ability-to-pay components that need one stay unknown. A French company is
+> matched by SIREN, or by an exact normalised name with one active holder;
+> anything looser is refused rather than guessed. Germany is **not**
+> implemented: the Handelsregister has no official API and its terms cap
+> retrieval at 60 an hour, so German companies fall through to the FR-245
+> estimated path.
 
 ### 7.4 Opportunities (FR-261–FR-265)
 
@@ -904,8 +910,10 @@ Carried forward honestly rather than closed:
   sealed profile sections and package generation notes are encrypted with
   per-job-seeker keys; the SQLite file itself relies on disk-level encryption.
   SQLCipher would add a dependency.
-- **France and Germany** have no financial-registry adapter (§7.3); companies in
-  those jurisdictions take the FR-245 estimated path.
+- **France has figures, Germany has none** (§7.3). The French register gives
+  revenue and net result only, and nothing for confidential accounts; Germany
+  has no adapter, because the Handelsregister has no official API, so German
+  companies take the FR-245 estimated path.
 - **Employer-kind enforcement is partly wired.** Scoring refuses to score an
   intermediary's company dimensions and labels an undisclosed employer, but the
   company-profiling, financial and speculative passes do not yet skip an agency

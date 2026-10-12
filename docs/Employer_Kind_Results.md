@@ -507,9 +507,10 @@ Ordered by how much it costs a job seeker.
    `dreamjob.pipeline.employer_eures_rung:eures_sector_rung`.
 10. **GB (Companies House) and NL (KvK) registry paths are code-complete and
     untested** — no API keys in this environment. `registry_rung` returns
-    `unavailable` with that reason rather than pretending. FR (Sirene) is not
-    implemented. DE has no free activity register, and Germany is 442 of the
-    corpus's names.
+    `unavailable` with that reason rather than pretending. FR is read for
+    financials (`registry.recherche_entreprises`, which stores the NAF code)
+    but is not a rung of this ladder yet. DE has no free activity register,
+    and Germany is 442 of the corpus's names.
 11. **Two writers still share `company_employer_kind`.** The ladder writes
     through `employer_resolution.write_verdict` (a column-introspecting upsert)
     and `employer_registry_rung.run_registry_pass` writes through

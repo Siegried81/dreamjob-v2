@@ -58,7 +58,7 @@ of taking those constraints seriously rather than working around them.
 ├───────────────┴──────────────┴───────────────┴──────────────┴────────┤
 │  Repositories    the only place SQL is written                       │
 ├──────────────────────────────────────────────────────────────────────┤
-│  SQLite (WAL)    99 tables · 157 indexes │  Filesystem: raw docs,    │
+│  SQLite (WAL)  101 tables · 158 indexes │  Filesystem: raw docs,    │
 │  private ▸ seeker, per query            │  generated CVs and PDFs,   │
 │  shared  ▸ knowledge base, no link back │  uploads, exports          │
 └──────────────────────────────────────────────────────────────────────┘
@@ -67,10 +67,10 @@ of taking those constraints seriously rather than working around them.
    (or local)     ATS / sites     NBB, KBO…     Resend
 ```
 
-**Scale** (re-derived 2026-10-06; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
-`tests/**/*.py`). 237 Python modules / 123,729 lines · 143 JS modules /
-44,424 lines · 126 test files / 64,624 lines · 43 migrations · 24 versioned
-prompt templates · 35 declared source adapters, 29 of them enabled. The
+**Scale** (re-derived 2026-10-12; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
+`tests/**/*.py`). 242 Python modules / 126,931 lines · 144 JS modules /
+44,717 lines · 136 test files / 67,701 lines · 45 migrations · 24 versioned
+prompt templates · 36 declared source adapters, 30 of them enabled. The
 offline pass count is in `README.md`, which is where it is re-derived.
 
 ---
@@ -207,7 +207,7 @@ terms-of-service status; `sync_catalogue()` writes that into `source_catalogue`
 at boot, where the planner reads it (FR-161, FR-164) and the administrator can
 override it (FR-363).
 
-**29 adapters:** 9 ATS · 9 job boards · 5 registries · 1 directory · 1 website
+**36 adapters:** 9 ATS · 15 job boards · 6 registries · 1 directory · 1 website
 crawler · 3 news/events · 1 compensation. Two bulk register importers
 (`kbo_bulk.py`, `companies_house_bulk.py`) and the board registry deliberately
 sit beside the contract rather than inside it: they seed the shared knowledge
@@ -389,7 +389,7 @@ profiled as if it were the client.
 
 | Requirement | Approach |
 |---|---|
-| NFR-101 interactive views < 2s at p95 | 157 indexes; FTS5 for search; deterministic pre-rank avoids an LLM call per row; lazy routes keep first paint small |
+| NFR-101 interactive views < 2s at p95 | 158 indexes; FTS5 for search; deterministic pre-rank avoids an LLM call per row; lazy routes keep first paint small |
 | NFR-102 ≥20 concurrent HTTP workers, serialised writes | Semaphore-bounded async egress; one global write lock under WAL |
 | NFR-103 typical campaign < 4 hours | Caps bound the work; ATS JSON is cheap; **not yet measured against a real campaign** |
 | NFR-104 bounded LLM spend | Pre-flight check, post-call debit, graceful degradation |
@@ -399,8 +399,8 @@ profiled as if it were the client.
 
 ## 9. Testing
 
-**2,240 tests collected, 64,624 lines across 126 files** (`tests/**/*.py`,
-re-counted 2026-10-06; `-m 'not llm and not load'` deselects 14, leaving 2,226.
+**2,400 tests collected, 67,701 lines across 136 files** (`tests/**/*.py`,
+re-counted 2026-10-12; `-m 'not llm and not load'` deselects 14, leaving 2,386.
 The offline pass count is in `README.md`, which is where it is re-derived).
 Each runs against a migrated temporary database and without network access; LLM
 and HTTP paths are stubbed or skipped, and the network and load tests are

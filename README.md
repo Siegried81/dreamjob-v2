@@ -133,11 +133,11 @@ than aspirational:
 | employer-kind verdict | `pipeline/employer_resolver.py` | no verdict without evidence |
 | company-domain decision | `pipeline/company_domains.py` | a namesake domain is refused, visibly |
 
-**Scale** (re-derived 2026-10-06; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
-`tests/**/*.py`): 237 Python modules / 123,729 lines ·
-143 JS modules / 44,424 lines · 126 test files / 64,624 lines ·
-**2,146 of 2,206 tests pass offline** · 99 tables · 157 indexes ·
-43 migrations · 35 adapter modules · 24 versioned prompt templates.
+**Scale** (re-derived 2026-10-12; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
+`tests/**/*.py`): 242 Python modules / 126,931 lines ·
+144 JS modules / 44,717 lines · 136 test files / 67,701 lines ·
+**2,328 of 2,352 tests pass offline** · 101 tables · 158 indexes ·
+45 migrations · 36 adapter modules · 24 versioned prompt templates.
 **156 of 157 requirements (99%)** from the specification are cited in the
 source: 103/104 Must, 44/44 Should, 9/9 Could.
 
@@ -147,13 +147,13 @@ source: 103/104 Must, 44/44 Should, 9/9 Could.
 |---|---|---|
 | ATS | 9 | Greenhouse, Lever, SmartRecruiters, Ashby, Recruitee, Personio, Workday, Teamtailor, Workable |
 | Job boards | 15 | EURES, VDAB, Actiris, Jobat, StepStone, Indeed, Welcome to the Jungle, Arbeitnow, generic HTML, Adzuna, Himalayas, Hacker News "Who is hiring", Jobicy, RemoteOK, Remotive |
-| Registries | 5 | NBB, KBO/BCE, Companies House, KvK, SEC EDGAR |
+| Registries | 6 | NBB, KBO/BCE, Companies House, KvK, SEC EDGAR, recherche-entreprises (FR) |
 | Directories | 1 | OpenCorporates |
 | Website | 1 | bounded company-site crawler |
 | News / events | 3 | RSS newsrooms, event radar, social event calendars |
 | Compensation | 1 | Eurostat Structure of Earnings Survey |
 
-The counts above are rows in `source_catalogue`: **35 declared, 29 enabled**.
+The counts above are rows in `source_catalogue`: **36 declared, 30 enabled**.
 Indeed, StepStone, SmartRecruiters and the social-event adapter ship disabled
 until an administrator acknowledges their terms of service (IR-101); `board.jobat`
 is enabled but also awaits that acknowledgement, and `board.generic`,
@@ -174,7 +174,7 @@ SQLite in WAL mode with a deliberate **one-writer** discipline; repositories are
 the only place SQL is written, and return plain dicts. 90 logical tables across
 43 forward-only migrations: 48 seeker-scoped (they carry `job_seeker_id`),
 39 shared knowledge-base, one migration ledger and two FTS5 search tables. The
-nine FTS5 shadow tables bring `sqlite_master` to the 99 tables counted above.
+nine FTS5 shadow tables bring `sqlite_master` to the 101 tables counted above.
 Plus a `usable_contact` view that encodes the objection rule at the database.
 
 ### Security
@@ -406,8 +406,11 @@ Stated rather than glossed:
 - **The SQLite file is not encrypted.** Credentials, secrets and sealed profile
   sections are field-encrypted; whole-database confidentiality rests on disk
   encryption. SQLCipher would add a dependency.
-- **France and Germany** have no financial-registry adapter; companies there take
-  the estimated path.
+- **France** is covered by the free State API (recherche-entreprises), which
+  publishes revenue and net result only - no balance sheet - and nothing for a
+  company whose accounts are confidential. **Germany** has no adapter: the
+  Handelsregister offers no official API and its terms cap retrieval at 60 an
+  hour, so German companies take the estimated path.
 - **Employer-kind enforcement is partly wired** — scoring excludes an
   intermediary's company dimensions, but company profiling and financial passes
   do not yet skip an agency outright.
