@@ -214,7 +214,7 @@ Summarised against Article 32:
 | Measure | Implementation |
 |---|---|
 | Encryption at rest | AES-256-GCM, keys derived per job seeker. Erasing a job seeker makes their ciphertext unreadable even if a copy survives |
-| Authentication | Argon2id with a password policy; TOTP MFA; sessions bound to the client |
+| Authentication | Argon2id with a password policy; TOTP MFA; WebAuthn passkeys (public keys only stored); sessions bound to the client |
 | Third-party credentials | **Never stored.** Browser automation attaches to a session the user owns and controls |
 | Mail tokens | Encrypted, scoped to send and bounce-read only, revocable from the interface |
 | Injection resistance | Scraped content is fenced as untrusted data and never concatenated into instructions |
@@ -227,8 +227,8 @@ Summarised against Article 32:
    encrypted at field level, but whole-database confidentiality relies on
    disk-level encryption. On a laptop with FileVault this is reasonable; on a
    shared host it is not. SQLCipher is the fix.
-2. **Passkeys are not implemented.** Password + optional TOTP is what exists, and
-   MFA is opt-in, so a fresh account is password-only until enrolled.
+2. **A fresh account is password-only until it adds a factor.** Passkeys and
+   TOTP both exist, and both are opt-in.
 3. **An administrator can read other job seekers' AI call logs**, including
    prompt text. Harmless when the operator is the sole data controller;
    unacceptable in a shared installation. **Must be resolved before any

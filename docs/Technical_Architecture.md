@@ -41,7 +41,7 @@ of taking those constraints seriously rather than working around them.
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │  /api  (session cookie, client-bound)
 ┌───────────────────────────────▼──────────────────────────────────────┐
-│  FastAPI         22 routers · 337 routes                             │
+│  FastAPI         23 routers · 364 paths                              │
 │                  current_seeker is the isolation boundary            │
 ├──────────────────────────────────────────────────────────────────────┤
 │  Pipeline        intake · enrichment · employer kind · planning ·    │
@@ -50,7 +50,7 @@ of taking those constraints seriously rather than working around them.
 │                  post-application                                    │
 ├───────────────┬──────────────┬───────────────┬──────────────┬────────┤
 │  LLMClient    │ EgressClient │ SourceAdapter │  JobRunner   │ crypto │
-│  budget       │ robots       │ 29 adapters   │  resumable   │ AES-   │
+│  budget       │ robots       │ 30 adapters   │  resumable   │ AES-   │
 │  redaction    │ rate limit   │ plan/fetch/   │  pause/      │ GCM    │
 │  injection    │ cache        │ parse/        │  cancel      │ per    │
 │  fencing      │ raw capture  │ normalise     │  checkpoint  │ seeker │
@@ -58,19 +58,19 @@ of taking those constraints seriously rather than working around them.
 ├───────────────┴──────────────┴───────────────┴──────────────┴────────┤
 │  Repositories    the only place SQL is written                       │
 ├──────────────────────────────────────────────────────────────────────┤
-│  SQLite (WAL)    99 tables · 157 indexes │  Filesystem: raw docs,    │
+│  SQLite (WAL)  101 tables · 158 indexes │  Filesystem: raw docs,    │
 │  private ▸ seeker, per query            │  generated CVs and PDFs,   │
 │  shared  ▸ knowledge base, no link back │  uploads, exports          │
 └──────────────────────────────────────────────────────────────────────┘
         │              │              │              │
    DeepSeek API   Job boards /    Registries    Gmail OAuth /
-   (or local)     ATS / sites     NBB, KBO…     Resend
+   (or local)     ATS / sites     NBB, KBO…     Resend · M365 (read)
 ```
 
-**Scale** (re-derived 2026-10-06; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
-`tests/**/*.py`). 237 Python modules / 123,729 lines · 143 JS modules /
-44,424 lines · 126 test files / 64,624 lines · 43 migrations · 24 versioned
-prompt templates · 35 declared source adapters, 29 of them enabled. The
+**Scale** (re-derived 2026-10-12; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
+`tests/**/*.py`). 244 Python modules / 128,284 lines · 147 JS modules /
+45,056 lines · 140 test files / 69,219 lines · 45 migrations · 24 versioned
+prompt templates · 36 declared source adapters, 30 of them enabled. The
 offline pass count is in `README.md`, which is where it is re-derived.
 
 ---
@@ -106,22 +106,22 @@ at the boundary. Migrations are forward-only `NNN_name.sql` files with a
 recorded checksum; editing an applied migration is a warning, not a silent
 divergence.
 
-**Schema shape.** 90 logical tables across 43 migrations — 48 seeker-scoped, 39
+**Schema shape.** 92 logical tables across 45 migrations — 49 seeker-scoped, 40
 shared, one migration ledger, and two FTS5 virtual tables; the nine FTS5 shadow
-tables take `sqlite_master` to 99 — plus a
+tables take `sqlite_master` to 101 — plus a
 `usable_contact` view that encodes the objection rule at the database:
 
 - **Private** — carry `job_seeker_id`: profile and versions, conflicts, skills,
   evidence, personas, enrichment findings, composite profile, dream job model,
   directives, campaigns, plan items, opportunities, application packages,
   dispatches, replies, pipeline cards, mock interviews, gap analyses, exports,
-  watchlist entries and apply selections.
+  watchlist entries, apply selections and the apply preference.
 - **Shared** — the knowledge base, carrying **no** link back to a job seeker:
   companies, company domains and domain candidates, financial years and
   analyses, competitor links, hiring signals, employer-kind verdicts and
   resolution attempts, registry identity, review summaries, vacancies,
   compensation observations, board registry, company seed, embeddings, raw
-  documents, events and source catalogue.
+  documents, events, geocoded places and source catalogue.
 - **Restricted** — `contact`, which is shared *except* when collected through
   browser automation, where `shareable = 0`, `owning_campaign_id` is set and
   `retention_until` applies (NFR-303).
@@ -181,9 +181,11 @@ llm.complete_json(
   redaction sweep.
 - **Embeddings (FR-341).** `llm.embed()` writes one content-hash-keyed vector per
   entity into `embedding`, skipping unchanged content; nearest-neighbour search
-  is pure-Python cosine, so the feature needs no vector database. It is built and
-  backfilled by `scripts/build_semantic_index.py` but not yet consulted by
-  scoring or the API.
+  is pure-Python cosine, so the feature needs no vector database. It is
+  backfilled by `scripts/build_semantic_index.py`, read by
+  `GET /api/opportunities/semantic` (restricted to the seeker's own
+  opportunities through `opportunities.vacancy_links`), and by scoring only
+  when `DREAMJOB_SEMANTIC_SCORING` is on (`scoring.embedding_relevance`).
 
 Prompts are versioned `.md` templates with a metadata header (NFR-602); the
 version travels into `llm_call.prompt_version`, so a regression in generated
@@ -207,7 +209,7 @@ terms-of-service status; `sync_catalogue()` writes that into `source_catalogue`
 at boot, where the planner reads it (FR-161, FR-164) and the administrator can
 override it (FR-363).
 
-**29 adapters:** 9 ATS · 9 job boards · 5 registries · 1 directory · 1 website
+**36 adapters:** 9 ATS · 15 job boards · 6 registries · 1 directory · 1 website
 crawler · 3 news/events · 1 compensation. Two bulk register importers
 (`kbo_bulk.py`, `companies_house_bulk.py`) and the board registry deliberately
 sit beside the contract rather than inside it: they seed the shared knowledge
@@ -237,6 +239,7 @@ one-writer invariant.
 | Data at rest (NFR-201) | AES-256-GCM, keys derived per job seeker by HKDF from one master key. Credentials, secrets, TOTP material, sealed profile sections and package generation notes are field-encrypted. Deleting a job seeker makes their ciphertext unreadable even if a copy survives. |
 | Passwords (NFR-202) | Argon2id (PBKDF2-SHA256 fallback), with a policy requiring three of four character classes |
 | MFA (NFR-202) | TOTP, secret stored encrypted, fail-closed if the envelope cannot be decrypted |
+| Passkeys (NFR-202) | WebAuthn via py_webauthn, user verification required, `none` attestation; public keys and sign counters in `job_seeker.webauthn_credentials`; challenges single-use, in memory, five minutes |
 | Sessions (NFR-202) | Random token; only the HMAC is stored; bound to a UA+IP fingerprint and re-checked per request; revoked on password change, admin reset and suspension |
 | Accounts (FR-108) | First account is admin; create/suspend/reset/delete, with a last-active-administrator guard and a self-guard |
 | Third-party credentials (NFR-203) | **Never stored.** Browser automation attaches to a session the user owns |
@@ -246,9 +249,9 @@ one-writer invariant.
 | Objections (NFR-302) | Enforced in a `usable_contact` view, not only in the interface |
 | Audit (NFR-702) | Append-only trail of who approved and sent what, with the versions used |
 
-**Known gaps**, stated rather than glossed: passkeys are not implemented (the
-password+MFA branch is); a `webauthn_credentials` column exists in the initial
-schema but no code path reads or writes it. The SQLite file itself is not
+**Known gaps**, stated rather than glossed: passkeys work on `localhost`
+unless the relying party is configured for another host, and their
+attestation is not verified. The SQLite file itself is not
 encrypted, so whole-database confidentiality rests on disk encryption —
 SQLCipher would add a dependency.
 
@@ -389,7 +392,7 @@ profiled as if it were the client.
 
 | Requirement | Approach |
 |---|---|
-| NFR-101 interactive views < 2s at p95 | 157 indexes; FTS5 for search; deterministic pre-rank avoids an LLM call per row; lazy routes keep first paint small |
+| NFR-101 interactive views < 2s at p95 | 158 indexes; FTS5 for search; deterministic pre-rank avoids an LLM call per row; lazy routes keep first paint small |
 | NFR-102 ≥20 concurrent HTTP workers, serialised writes | Semaphore-bounded async egress; one global write lock under WAL |
 | NFR-103 typical campaign < 4 hours | Caps bound the work; ATS JSON is cheap; **not yet measured against a real campaign** |
 | NFR-104 bounded LLM spend | Pre-flight check, post-call debit, graceful degradation |
@@ -399,8 +402,8 @@ profiled as if it were the client.
 
 ## 9. Testing
 
-**2,240 tests collected, 64,624 lines across 126 files** (`tests/**/*.py`,
-re-counted 2026-10-06; `-m 'not llm and not load'` deselects 14, leaving 2,226.
+**2,461 tests collected, 69,219 lines across 140 files** (`tests/**/*.py`,
+re-counted 2026-10-12; `-m 'not llm and not load'` deselects 14, leaving 2,447.
 The offline pass count is in `README.md`, which is where it is re-derived).
 Each runs against a migrated temporary database and without network access; LLM
 and HTTP paths are stubbed or skipped, and the network and load tests are
@@ -447,7 +450,7 @@ normalised, and the dream-job model generated through the live DeepSeek API.
 | A calendar provider | Implement the client and wire the OAuth exchange | One file |
 | A language | Add to the prompt templates and `help/content.js` | Content only |
 | A local model | Set `DREAMJOB_LOCAL_LLM_*` and list the task groups | Configuration |
-| Semantic search | Set `DREAMJOB_EMBEDDINGS_*` and run `scripts/build_semantic_index.py` | Config + script |
+| Semantic search | Set `DREAMJOB_EMBEDDINGS_*` and run `scripts/build_semantic_index.py`; `DREAMJOB_SEMANTIC_SCORING=true` to let it score | Config + script |
 | A scheduler task | Add a `Task` with an interval to `DEFAULT_TASKS` | `monitoring/scheduler.py` |
 | A bulk employer import | An operator script against the shared knowledge base | One script |
 | An account lifecycle action | Add to `auth_service` behind `current_admin` | Service + router |

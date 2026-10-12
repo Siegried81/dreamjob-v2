@@ -12,6 +12,7 @@ import { useMemo, useState } from 'react'
 
 import { api } from '../../api/client'
 import { Caution, HelpTip } from '../../components/Help'
+import PasskeysCard from '../../components/PasskeysCard'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, useFetch } from '../../components/ui'
 
 /** The fields people most often mean, offered so nobody has to guess a path. */
@@ -250,6 +251,9 @@ export default function PrivacyTab({ profile, onFlagsChanged }) {
           </p>
         </Modal>
       )}
+
+      {/* NFR-202: the account's own sign-in passkeys sit with its other private settings. */}
+      <PasskeysCard />
     </div>
   )
 }

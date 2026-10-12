@@ -187,7 +187,12 @@ def badges(company_ids: list[str], job_seeker_id: str | None = None) -> dict[str
 
 
 def companies_by_role(roles: tuple[str, ...] = ("agency", "board")) -> list[str]:
-    """The company ids the profiling, financial and speculative gates exclude."""
+    """Company ids by their stored role, for the API's role listing.
+
+    The stored role only: no correction is applied.  The research gates read
+    the effective role instead, through
+    :func:`dreamjob.pipeline.employer_product.intermediary_company_ids`.
+    """
     marks = ", ".join("?" for _ in roles)
     rows = query_all(
         f"SELECT company_id FROM {TABLE} WHERE employer_role IN ({marks})", tuple(roles)

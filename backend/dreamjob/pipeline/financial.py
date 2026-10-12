@@ -58,6 +58,7 @@ DEFAULT_YEARS = 5
 REGISTRIES_BY_JURISDICTION: dict[str, list[str]] = {
     "BE": ["registry.kbo", "registry.nbb"],
     "NL": ["registry.kvk"],
+    "FR": ["registry.recherche_entreprises"],
     "GB": ["registry.companies_house"],
     "UK": ["registry.companies_house"],
     "US": ["registry.sec_edgar"],
@@ -1205,11 +1206,20 @@ async def rerun(campaign_id: str, job_seeker_id: str, **options: Any) -> dict[st
     # A stage re-run is interactive: bound it, and let the background worker
     # (JOB_KIND) be the one that walks a hundred companies (FR-185).
     company_ids = campaign_companies(campaign_id, int(options.get("limit") or 25))
+    # An agency's accounts say nothing about its client's ability to pay, and
+    # the scorer refuses them anyway (FR-341), so they are not collected.
+    intermediaries = _intermediaries(company_ids, job_seeker_id)
+    company_ids = [c for c in company_ids if c not in intermediaries]
     if not company_ids:
         return {
             "companies": 0,
             "analysed": 0,
-            "note": "No company is in scope yet; run company discovery before the registries",
+            "skipped_intermediaries": len(intermediaries),
+            "note": (
+                "Every company in scope is an agency or a job board; none was analysed"
+                if intermediaries
+                else "No company is in scope yet; run company discovery before the registries"
+            ),
         }
 
     llm = LLMClient(campaign_id=campaign_id, job_seeker_id=job_seeker_id)
@@ -1245,7 +1255,15 @@ async def rerun(campaign_id: str, job_seeker_id: str, **options: Any) -> dict[st
         "estimated": estimated,
         "years_collected": collected,
         "years": years,
+        "skipped_intermediaries": len(intermediaries),
     }
+
+
+def _intermediaries(company_ids: list[str], job_seeker_id: str | None) -> set[str]:
+    """The agencies and boards among ``company_ids`` (the shared FR-341 gate)."""
+    from dreamjob.pipeline import employer_product  # noqa: PLC0415 - avoids a cycle
+
+    return employer_product.intermediary_company_ids(company_ids, job_seeker_id)
 
 
 @asynccontextmanager
@@ -1284,11 +1302,14 @@ async def financial_worker(ctx: Any) -> None:
     ctx.progress(done, len(company_ids))
 
     llm = LLMClient(campaign_id=ctx.campaign_id, job_seeker_id=ctx.job_seeker_id)
+    # Read once per run rather than stored in the checkpoint, so a verdict
+    # reached while the job was paused still applies when it resumes.
+    intermediaries = _intermediaries(company_ids[done:], ctx.job_seeker_id)
     async with EgressClient() as egress:
         for index in range(done, len(company_ids)):
             await ctx.checkpoint_barrier()
             company_id = company_ids[index]
-            company = repo.company(company_id)
+            company = None if company_id in intermediaries else repo.company(company_id)
             if company:
                 try:
                     await collect_company_financials(company, egress=egress, llm=llm)

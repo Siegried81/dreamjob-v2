@@ -168,7 +168,10 @@ specific URL — and the screen makes each one traceable and editable (FR-125).
 
 **Online enrichment** (FR-122) searches for the job seeker using name,
 employers, locations and declared handles as anchors: personal site,
-repositories, newsletters, publications, talks, press.
+repositories, newsletters, publications, talks, press. The search goes to the
+API an administrator configured for contact discovery (Brave, Bing or Google
+CSE) when one is switched on, and to DuckDuckGo's keyless HTML endpoint
+otherwise or when the API fails.
 
 **Identity matching is the risk that matters here** (FR-123, RK-02). A namesake's
 career must never reach a CV. Every finding is scored on multiple independent
@@ -270,13 +273,13 @@ stored with the installation's other settings.
 
 ### 6.3 Collection (FR-181–FR-186)
 
-**Twenty-nine adapters** over a common four-step contract:
+**Thirty-six adapters** over a common four-step contract:
 
 | Type | Count | Sources |
 |---|---|---|
 | ATS | 9 | Greenhouse, Lever, SmartRecruiters, Ashby, Recruitee, Personio, Workday, Teamtailor, Workable |
-| Job boards | 9 | EURES, VDAB, Actiris, Jobat, StepStone, Indeed, Welcome to the Jungle, Arbeitnow, generic HTML |
-| Registries | 5 | NBB, KBO/BCE, Companies House, KvK, SEC EDGAR |
+| Job boards | 15 | EURES, VDAB, Actiris, Jobat, StepStone, Indeed, Welcome to the Jungle, Arbeitnow, generic HTML, Adzuna, Himalayas, Hacker News "Who is hiring", Jobicy, RemoteOK, Remotive |
+| Registries | 6 | NBB, KBO/BCE, Companies House, KvK, SEC EDGAR, recherche-entreprises (FR) |
 | Directories | 1 | OpenCorporates |
 | Website | 1 | Bounded company-site crawler |
 | News / events | 3 | RSS newsrooms, event radar, social event calendars |
@@ -435,11 +438,17 @@ figure. Balance-sheet totals and sign conventions are reconciled and
 inconsistencies flagged rather than silently accepted (NFR-404).
 
 > **Decision (OQ-01).** Belgium is first-class (NBB + KBO), with the UK
-> (Companies House), the Netherlands (KvK), the US (SEC EDGAR) and
-> OpenCorporates implemented to the same contract. France (Infogreffe) and
-> Germany (Bundesanzeiger) are **not** implemented; companies in those
-> jurisdictions fall through to the FR-245 estimated path. Adding them is a new
-> adapter and no pipeline change.
+> (Companies House), the Netherlands (KvK), the US (SEC EDGAR), France
+> (recherche-entreprises.api.gouv.fr) and OpenCorporates implemented to the
+> same contract. The French source is the State's free, keyless API over Sirene
+> and the RNE: identity, NAF code, headcount band and, where accounts are
+> published, revenue and net result - never a balance sheet, so the
+> ability-to-pay components that need one stay unknown. A French company is
+> matched by SIREN, or by an exact normalised name with one active holder;
+> anything looser is refused rather than guessed. Germany is **not**
+> implemented: the Handelsregister has no official API and its terms cap
+> retrieval at 60 an hour, so German companies fall through to the FR-245
+> estimated path.
 
 ### 7.4 Opportunities (FR-261–FR-265)
 
@@ -503,8 +512,19 @@ Feedback re-tunes that job seeker's weights and suggests directive refinements
 
 A **semantic index** (FR-341) stores one content-hash-keyed embedding per
 company and vacancy and can answer nearest-neighbour queries with pure-Python
-cosine; it is built and maintained, but neither scoring nor search consults it
-yet, so it is listed among the known limitations rather than claimed as live.
+cosine. `GET /api/opportunities/semantic?q=` ranks the job seeker's own
+opportunities by similarity of their vacancy to the query - another seeker's
+rows are never candidates, and without a model the answer is an empty list that
+says why. Scoring consults the index only when `DREAMJOB_SEMANTIC_SCORING` is
+on: the vacancy's similarity to the dream job (statement, target roles and
+responsibilities, redacted and sent only with the seeker's LLM-transfer
+consent) then weighs 0.25 beside title (0.5) and criteria (0.5) in the
+mechanical dream fit. A vacancy that is not indexed contributes nothing rather
+than zero.
+
+> **Decision.** Off by default, because it changes what a score means and the
+> raw cosine is not calibrated across embeddings models. With it off, the
+> embedder is never called and every score is unchanged.
 
 ### 7.6 Employer kind — agencies, boards and undisclosed employers
 
@@ -660,6 +680,12 @@ Two backends behind one interface:
 | Replies | Land in the inbox; detected by IMAP | No inbox; webhook events |
 | Credentials | Refresh token, encrypted per job seeker, revocable | API key |
 | Scopes | `gmail.send` + `gmail.readonly` for bounce reading | — |
+
+A third connection, **Microsoft 365 / Outlook.com over Graph**, is read-only:
+it holds `Mail.Read`, `User.Read` and `offline_access` only, refuses a token
+that could write, only ever issues `GET` against the mailbox, and is never
+chosen to send. It exists so that replies to a job seeker whose inbox is
+Microsoft's are still detected (FR-326).
 
 > **Note.** The Resend backend is complete but the API key has not yet been
 > supplied. It fails with an actionable message and the status screen reports
@@ -897,25 +923,43 @@ the responsive layout in the stylesheets that the matrix scans.
 
 Carried forward honestly rather than closed:
 
-- **Passkeys (NFR-202)** are not implemented; the requirement's "strong
-  passwords with MFA" branch is. MFA is opt-in per account, and a placeholder
-  WebAuthn column exists in the schema but no code path uses it.
+- **Passkeys (NFR-202)** sit beside the password + MFA branch: a signed-in job
+  seeker registers one (Profile > Privacy), and can then sign in with it alone,
+  user verification required (`security/passkeys.py`, py_webauthn). They need
+  the app opened on `localhost` (WebAuthn refuses an IP address) unless
+  `DREAMJOB_WEBAUTHN_RP_ID` / `DREAMJOB_WEBAUTHN_ORIGINS` name another host;
+  attestation is not verified (`none`); MFA remains opt-in for password
+  sign-in.
 - **Database-level encryption (NFR-201)** is partial. Credentials, secrets, the
   sealed profile sections and package generation notes are encrypted with
   per-job-seeker keys; the SQLite file itself relies on disk-level encryption.
   SQLCipher would add a dependency.
-- **France and Germany** have no financial-registry adapter (§7.3); companies in
-  those jurisdictions take the FR-245 estimated path.
-- **Employer-kind enforcement is partly wired.** Scoring refuses to score an
-  intermediary's company dimensions and labels an undisclosed employer, but the
-  company-profiling, financial and speculative passes do not yet skip an agency
-  outright, so an agency can still consume profiling budget. Recorded in
-  `Employer_Kind_Results.md`.
-- **Semantic search is built but not consumed.** The embedding table, backfill
-  script and cosine query exist; nothing in scoring or the API reads them yet.
-- **Microsoft 365 mail** is not implemented, and the Microsoft 365 **calendar
-  Graph client is implemented but not connectable** because its OAuth exchange
-  is not exposed. Gmail and Google Calendar are wired end to end.
+- **France has figures, Germany has none** (§7.3). The French register gives
+  revenue and net result only, and nothing for confidential accounts; Germany
+  has no adapter, because the Handelsregister has no official API, so German
+  companies take the FR-245 estimated path.
+- **Employer-kind enforcement does not rewrite old scores.** Scoring refuses
+  to score an intermediary's company dimensions and labels an undisclosed
+  employer, and the company-profiling, financial (stage re-run and background
+  worker) and speculative-opening passes skip every company whose effective
+  role - the job seeker's own correction applied - is agency or job board
+  (`employer_product.intermediary_company_ids`). Unresearched and unverified
+  companies still pass. What remains: opportunity rows scored before their
+  company was tagged keep the old company sub-score until re-scored, and the
+  apply e-mail still frames an agency as the employer. Recorded in
+  `Employer_Kind_Results.md` §7.
+- **Semantic search has no screen, and semantic scoring is opt-in.** The API
+  answers `GET /api/opportunities/semantic`; the interface does not call it
+  yet. `DREAMJOB_SEMANTIC_SCORING` is off by default and uses the model's raw,
+  uncalibrated cosine.
+- **Microsoft 365 mail is read-only.** A Microsoft 365 or Outlook.com inbox
+  connects over Graph with `Mail.Read` only (`mail/m365.py`) and is polled for
+  replies and bounces, Inbox folder only; it never sends, the dispatcher never
+  picks it, job alerts are still read from Gmail only, and it needs an app
+  registration the administrator creates (`docs/M365_Mail_Setup.md`). The
+  Microsoft 365 **calendar Graph client is implemented but not connectable**
+  because its OAuth exchange is not exposed. Gmail and Google Calendar are
+  wired end to end.
 - **Bulk register and board importers are operator scripts**, run by hand rather
   than on the scheduler, so the company inventory widens when an operator runs
   them.
@@ -924,8 +968,10 @@ Carried forward honestly rather than closed:
   `security.txt` sources need no key; the search source is what reaches the
   F5/Cloudflare-protected sites, and without a key those companies are recorded
   as `blocked` rather than silently contactless.
-- **DuckDuckGo search** returns a bot-check page from datacentre ranges, so
-  FR-122 degrades to declared and handle-derived URLs in such an environment.
+- **DuckDuckGo search**, used by FR-122 when no search provider is switched on,
+  returns a bot-check page from datacentre ranges, so enrichment then degrades
+  to declared and handle-derived URLs. Configuring the provider on the Contacts
+  screen (administrators) removes the dependency.
 
 ---
 
@@ -938,7 +984,7 @@ Carried forward honestly rather than closed:
 | Directives through structured controls, plan reviewed, source excluded, launch | Implemented |
 | Scope-capped LinkedIn run, duration within ±25%, stops on challenge | Implemented; **not exercised against live LinkedIn** |
 | 20 companies with profiles, five-year financials, 3 competitors, 2 speculative openings each | Implemented; keyed registries degrade without credentials, and register lookups distinguish "no match" from "unavailable" |
-| Interim agency classified before its company is profiled; undisclosed employer labelled, not scored | Implemented; enforcement partly wired (see §12) |
+| Interim agency classified before its company is profiled; undisclosed employer labelled, not scored | Implemented; research passes skip intermediaries, old scores are not backfilled (see §12) |
 | Ranked list with explainable scores; manual order survives recalculation | Implemented and tested |
 | Five opportunities: contact, tailored CV, briefing, motivation, email, bulk approve, dispatch, bounce | Implemented; dispatch needs the Resend key or Gmail OAuth |
 | ATS application form pre-filled, never submitted | Implemented; browsed against the user's own session |

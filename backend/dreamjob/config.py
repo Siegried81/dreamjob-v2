@@ -36,6 +36,12 @@ class Settings(BaseSettings):
 
     master_key: str = Field("", alias="DREAMJOB_MASTER_KEY")
     session_secret: str = Field("", alias="DREAMJOB_SESSION_SECRET")
+    # Passkeys (NFR-202, security.passkeys).  WebAuthn refuses an IP address
+    # as the relying-party id, so the app is opened on ``localhost``.
+    webauthn_rp_id: str = Field("localhost", alias="DREAMJOB_WEBAUTHN_RP_ID")
+    webauthn_origins: str = Field(
+        "http://localhost:5173,http://localhost:8000", alias="DREAMJOB_WEBAUTHN_ORIGINS"
+    )
 
     # --- LLM (CR-409) ------------------------------------------------------
     llm_provider: str = Field("deepseek", alias="DREAMJOB_LLM_PROVIDER")
@@ -73,6 +79,10 @@ class Settings(BaseSettings):
     # no semantic index: the feature is inert rather than broken.
     embeddings_model: str = Field("", alias="DREAMJOB_EMBEDDINGS_MODEL")
     embeddings_base_url: str = Field("", alias="DREAMJOB_EMBEDDINGS_BASE_URL")
+    # Lets the semantic index contribute to the deterministic dream-fit
+    # sub-score (pipeline.scoring.embedding_relevance).  Off by default: turning
+    # it on changes what a score means, so it is an explicit operator choice.
+    semantic_scoring: bool = Field(False, alias="DREAMJOB_SEMANTIC_SCORING")
 
     default_token_budget: int = Field(2_000_000, alias="DREAMJOB_DEFAULT_TOKEN_BUDGET")
     # How many opportunities of a campaign earn an LLM scoring call (NFR-104;
@@ -103,6 +113,14 @@ class Settings(BaseSettings):
     gmail_client_secret: str = Field("", alias="GMAIL_CLIENT_SECRET")
     gmail_redirect_uri: str = Field(
         "http://127.0.0.1:8000/api/mail/gmail/callback", alias="GMAIL_REDIRECT_URI"
+    )
+    # Microsoft 365 / Outlook.com, read-only over Graph (mail.m365).  The
+    # secret stays empty for the recommended public-client registration.
+    m365_client_id: str = Field("", alias="M365_CLIENT_ID")
+    m365_client_secret: str = Field("", alias="M365_CLIENT_SECRET")
+    m365_tenant: str = Field("common", alias="M365_TENANT")
+    m365_redirect_uri: str = Field(
+        "http://localhost:8000/api/mail/m365/callback", alias="M365_REDIRECT_URI"
     )
     imap_host: str = Field("imap.gmail.com", alias="DREAMJOB_IMAP_HOST")
     imap_port: int = Field(993, alias="DREAMJOB_IMAP_PORT")

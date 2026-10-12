@@ -28,6 +28,7 @@ from dreamjob.adapters.registries.companies_house import CompaniesHouseAdapter
 from dreamjob.adapters.registries.kbo import KBOAdapter
 from dreamjob.adapters.registries.kvk import KvKAdapter
 from dreamjob.adapters.registries.nbb import NBBAdapter
+from dreamjob.adapters.registries.recherche_entreprises import RechercheEntreprisesAdapter
 from dreamjob.adapters.registries.sec_edgar import SECEdgarAdapter
 from dreamjob.pipeline import collection
 
@@ -100,6 +101,12 @@ RESOLVERS: list[tuple[str, type, Any, Any]] = [
         OpenCorporatesAdapter,
         {"results": {"total_count": 0, "companies": []}},
         {"data": {"total_count": 2, "companies": [{"company": {"name": "NOBIA AB"}}]}},
+    ),
+    (
+        "recherche_entreprises",
+        RechercheEntreprisesAdapter,
+        {"results": [], "total_results": 0, "page": 1, "per_page": 10},
+        {"total_results": 3, "items": [{"siren": "552032534", "nom_complet": "NOBIA"}]},
     ),
     (
         # The deposit list has no count of its own, so the container's presence

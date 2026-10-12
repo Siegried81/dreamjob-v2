@@ -39,6 +39,7 @@ injection - stays flagged for review here and in everything downstream.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field, replace
 from typing import Any
@@ -52,6 +53,8 @@ from dreamjob.pipeline.employer_kind import (
     Verdict,
     effective_verdict,
 )
+
+log = logging.getLogger(__name__)
 
 # --- the vocabulary the product reads --------------------------------------
 
@@ -487,6 +490,39 @@ def badge_from_row(row: dict[str, Any], language: str | None = "en") -> dict[str
         "corrected": bool(row.get("employer_kind_correction")),
         "dimensions_not_assessed": [] if disclosed else list(COMPANY_DIMENSIONS),
         "evidence_is_untrusted_web_content": True,
+    }
+
+
+def intermediary_company_ids(
+    company_ids: list[str], job_seeker_id: str | None = None
+) -> set[str]:
+    """The companies among ``company_ids`` that research passes must skip.
+
+    The gate the company-profiling, financial and speculative passes share: a
+    company whose effective role is ``agency`` or ``board`` is not the
+    employer, so crawling its site, collecting its filings or inventing an
+    opening "at" it spends budget on the wrong organisation.  The role is read
+    through :func:`kind_repo.badges`, so a job seeker's own correction (and a
+    promoted shared one) applies exactly as it does on the badge they see.
+
+    Only a decided intermediary is skipped.  ``unverified`` and unresearched
+    companies pass, for the reason :attr:`EmployerTag.employer_disclosed`
+    gives: our coverage gap is not evidence about them.  A failure to read the
+    verdicts fails open - the pass runs as it did before this gate existed -
+    because an unreadable verdict table must not silently stop all research.
+    """
+    ids = [str(c) for c in company_ids if c]
+    if not ids:
+        return set()
+    try:
+        badges = kind_repo.badges(ids, job_seeker_id)
+    except Exception:  # noqa: BLE001 - see "fails open" above
+        log.exception("Employer-kind gate could not read verdicts")
+        return set()
+    return {
+        company_id
+        for company_id, badge in badges.items()
+        if badge.get("employer_role") in (ROLE_AGENCY, ROLE_BOARD)
     }
 
 

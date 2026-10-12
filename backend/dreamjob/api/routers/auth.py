@@ -20,6 +20,7 @@ from dreamjob.config import get_settings
 from dreamjob.db.repositories import intelligence as directives_repo
 from dreamjob.db.repositories import seekers as repo
 from dreamjob.security import auth_service as auth
+from dreamjob.security import passkeys
 from dreamjob.security.audit import record_audit
 from dreamjob.security.auth_service import has_consent, require_consent
 
@@ -63,6 +64,21 @@ class TotpActivateIn(BaseModel):
 class TotpDisableIn(BaseModel):
     password: str
     code: str | None = None
+
+
+class PasskeyRegisterIn(BaseModel):
+    ceremony_id: str = Field(max_length=100)
+    credential: dict
+    name: str | None = Field(None, max_length=passkeys.MAX_NAME_LENGTH)
+
+
+class PasskeyOptionsIn(BaseModel):
+    email: EmailStr | None = None
+
+
+class PasskeyLoginIn(BaseModel):
+    ceremony_id: str = Field(max_length=100)
+    credential: dict
 
 
 class ConsentIn(BaseModel):
@@ -278,6 +294,61 @@ def mfa_disable(payload: TotpDisableIn, seeker: CurrentSeeker = Depends(current_
     except auth.MFAUnavailable as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     return auth.mfa_status(seeker.id)
+
+
+# ---------------------------------------------------------------------------
+# Passkeys (NFR-202) - alongside password + MFA, not instead of it
+# ---------------------------------------------------------------------------
+
+
+@router.get("/me/passkeys")
+def passkey_list(seeker: CurrentSeeker = Depends(current_seeker)) -> list[dict]:
+    return passkeys.list_passkeys(seeker.id)
+
+
+@router.post("/me/passkeys/options")
+def passkey_registration_options(seeker: CurrentSeeker = Depends(current_seeker)) -> dict:
+    """Options for ``navigator.credentials.create``, bound to this session's seeker."""
+    try:
+        return passkeys.registration_options(seeker.id)
+    except passkeys.PasskeyError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+@router.post("/me/passkeys", status_code=status.HTTP_201_CREATED)
+def passkey_register(
+    payload: PasskeyRegisterIn, seeker: CurrentSeeker = Depends(current_seeker)
+) -> dict:
+    try:
+        return passkeys.register(seeker.id, payload.ceremony_id, payload.credential, payload.name)
+    except passkeys.PasskeyError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+@router.delete("/me/passkeys/{credential_id}")
+def passkey_remove(credential_id: str, seeker: CurrentSeeker = Depends(current_seeker)) -> dict:
+    if not passkeys.remove_passkey(seeker.id, credential_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Passkey not found")
+    return {"removed": True}
+
+
+@router.post("/passkey/options")
+def passkey_login_options(payload: PasskeyOptionsIn) -> dict:
+    """Options for ``navigator.credentials.get``; no session needed or revealed."""
+    return passkeys.authentication_options(str(payload.email) if payload.email else None)
+
+
+@router.post("/passkey/login")
+def passkey_login(payload: PasskeyLoginIn, request: Request, response: Response) -> dict:
+    """Sign in with a passkey: the device's user verification is the second factor."""
+    try:
+        row = passkeys.authenticate(payload.ceremony_id, payload.credential)
+    except passkeys.PasskeyError as exc:
+        record_audit("session.login_failed", "job_seeker", None, detail={"method": "passkey"})
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+    repo.set_last_login(row["id"])
+    session = _issue_session(response, row["id"], request)
+    return {**_public(row), "session": session, "consent": auth.consent_state(row["id"])}
 
 
 # ---------------------------------------------------------------------------
