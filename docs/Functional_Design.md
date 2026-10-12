@@ -906,11 +906,16 @@ Carried forward honestly rather than closed:
   SQLCipher would add a dependency.
 - **France and Germany** have no financial-registry adapter (§7.3); companies in
   those jurisdictions take the FR-245 estimated path.
-- **Employer-kind enforcement is partly wired.** Scoring refuses to score an
-  intermediary's company dimensions and labels an undisclosed employer, but the
-  company-profiling, financial and speculative passes do not yet skip an agency
-  outright, so an agency can still consume profiling budget. Recorded in
-  `Employer_Kind_Results.md`.
+- **Employer-kind enforcement does not rewrite old scores.** Scoring refuses
+  to score an intermediary's company dimensions and labels an undisclosed
+  employer, and the company-profiling, financial (stage re-run and background
+  worker) and speculative-opening passes skip every company whose effective
+  role - the job seeker's own correction applied - is agency or job board
+  (`employer_product.intermediary_company_ids`). Unresearched and unverified
+  companies still pass. What remains: opportunity rows scored before their
+  company was tagged keep the old company sub-score until re-scored, and the
+  apply e-mail still frames an agency as the employer. Recorded in
+  `Employer_Kind_Results.md` §7.
 - **Semantic search is built but not consumed.** The embedding table, backfill
   script and cosine query exist; nothing in scoring or the API reads them yet.
 - **Microsoft 365 mail** is not implemented, and the Microsoft 365 **calendar
@@ -938,7 +943,7 @@ Carried forward honestly rather than closed:
 | Directives through structured controls, plan reviewed, source excluded, launch | Implemented |
 | Scope-capped LinkedIn run, duration within ±25%, stops on challenge | Implemented; **not exercised against live LinkedIn** |
 | 20 companies with profiles, five-year financials, 3 competitors, 2 speculative openings each | Implemented; keyed registries degrade without credentials, and register lookups distinguish "no match" from "unavailable" |
-| Interim agency classified before its company is profiled; undisclosed employer labelled, not scored | Implemented; enforcement partly wired (see §12) |
+| Interim agency classified before its company is profiled; undisclosed employer labelled, not scored | Implemented; research passes skip intermediaries, old scores are not backfilled (see §12) |
 | Ranked list with explainable scores; manual order survives recalculation | Implemented and tested |
 | Five opportunities: contact, tailored CV, briefing, motivation, email, bulk approve, dispatch, bounce | Implemented; dispatch needs the Resend key or Gmail OAuth |
 | ATS application form pre-filled, never submitted | Implemented; browsed against the user's own session |

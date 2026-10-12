@@ -477,13 +477,14 @@ Ordered by how much it costs a job seeker.
    migrated — migration 111 went to the ladder trail instead. `vacancy` has no
    `posting_on_behalf`, `employer_named_in_posting`, `employer_descriptors` or
    `offering_code`.
-5. **The gates are not wired.** `kind_repo.companies_by_role()` exists and is
-   called by exactly one place: the API's own listing endpoint. The company
-   profiling, financial-analysis and speculative-opening workers do **not**
-   consult the employer role. No damage has materialised — of 56 agencies only
-   FORUM JOBS carries a `business_summary` (built before the tag existed) and
-   there are zero speculative openings at agencies — but that is because those
-   passes have not been re-run, not because anything stops them.
+5. **The gates are wired; what they already let through is not undone.**
+   `employer_product.intermediary_company_ids()` is consulted by
+   `company_profile.rerun`, `financial.rerun`, `financial.financial_worker` and
+   `speculative.candidate_companies`, and each skips a company whose effective
+   role (the seeker's correction applied, as on the badge) is agency or board.
+   The re-run reports carry `skipped_intermediaries`. A profile built before
+   the tag existed - FORUM JOBS's `business_summary` - is left in place, not
+   deleted.
 6. **Existing opportunity rows keep a company sub-score computed against the
    agency** until they are re-scored. The refusal is correct on re-score
    (screenshot 07) but there was no backfill; the proposal's N13 re-score is
