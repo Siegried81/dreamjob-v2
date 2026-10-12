@@ -184,3 +184,40 @@ skipped: the Handelsregister has no official API and its terms cap retrieval at
 
 **What would reverse it.** Removing the `FR` entry sends French companies back
 to the estimated path; the adapter itself stays harmless.
+
+## 2026-10-12 — one vacancy row per dedup key
+
+**What changed.** `vacancy.dedup_key` was under a plain index; migration 160
+makes it unique (`WHERE dedup_key IS NOT NULL`) after folding the duplicates
+already stored. `KnowledgeBaseWriter._write_vacancy` turns the resulting
+IntegrityError into a merge into the row that won, and a fuzzy merge that would
+copy a key another row holds keeps the matched row's own key instead.
+
+**Why.** The installed database held 15,697 vacancies of which 242 keys were
+stored twice, every pair from the same adapter (`raw_document_id` shared
+in 155 pairs), all collected on 2026-10-04 between 14:20 and 15:07 UTC). The
+commit history starts on 2026-10-06, so how that run wrote them is not readable
+here. Two paths in the current writer can still produce it, and both are now
+reproduced by tests that fail without the change: a writer whose key lookup ran
+before another writer committed, and a fuzzy merge copying the incoming key onto
+a row while a second row already holds that key.
+
+**Which row survives.** The newest of each key (`collected_at`, then `id`). It is
+the row `vacancy_by_dedup_key` already returned, so every merge since the pair
+appeared went into it. Of the 242 older rows on the installed database, 228 had
+no opportunity, 4 had theirs only on the newer row, and 10 had an opportunity on
+both rows in the same campaign. `idx_opp_campaign_vacancy` allows one per
+campaign, so those 10 cannot be moved: an untouched copy (status `new`, not
+selected, pinned or ranked, nothing built on it) is deleted, and one the job
+seeker acted on is kept and only loses its vacancy link. All 10 on the installed
+database were untouched. Provenance follows the surviving row; embeddings of the
+deleted rows are dropped.
+
+**What it means for the numbers.** Vacancy counts fall by the number of folded
+rows (242 on the installed database) and the opportunity list of the campaigns
+concerned loses its duplicates. A posting stored under two different source URLs
+with the same title, employer, place and week keeps one URL: 10 of the 242 pairs
+were such, and the writer already treated each as one posting.
+
+**What would reverse it.** Dropping the unique index brings back a plain one; the
+rows deleted by migration 160 are only in a backup taken before it ran.

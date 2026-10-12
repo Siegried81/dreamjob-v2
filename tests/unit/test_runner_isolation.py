@@ -53,6 +53,7 @@ import contextlib
 import sqlite3
 import threading
 import time
+import uuid
 from collections.abc import Iterator
 
 import pytest
@@ -202,7 +203,9 @@ def blocking_writes(milliseconds: int = UNIT_MS, *, tag: str = "unit") -> int:
             {
                 "title": f"Engineer {tag}-{written}",
                 "source_url": f"https://load.test/{tag}/{written}",
-                "dedup_key": f"{tag}-{written}",
+                # Unique per row: a pool reuses its threads, so a tag built from
+                # the thread id repeats across jobs, and dedup_key is unique.
+                "dedup_key": f"{tag}-{written}-{uuid.uuid4().hex}",
                 "source_adapter": "test.isolation",
                 "description": "x" * 400,
                 "collected_at": utcnow(),
