@@ -41,7 +41,7 @@ of taking those constraints seriously rather than working around them.
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │  /api  (session cookie, client-bound)
 ┌───────────────────────────────▼──────────────────────────────────────┐
-│  FastAPI         22 routers · 337 routes                             │
+│  FastAPI         23 routers · 364 paths                              │
 │                  current_seeker is the isolation boundary            │
 ├──────────────────────────────────────────────────────────────────────┤
 │  Pipeline        intake · enrichment · employer kind · planning ·    │
@@ -64,7 +64,7 @@ of taking those constraints seriously rather than working around them.
 └──────────────────────────────────────────────────────────────────────┘
         │              │              │              │
    DeepSeek API   Job boards /    Registries    Gmail OAuth /
-   (or local)     ATS / sites     NBB, KBO…     Resend
+   (or local)     ATS / sites     NBB, KBO…     Resend · M365 (read)
 ```
 
 **Scale** (re-derived 2026-10-12; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,

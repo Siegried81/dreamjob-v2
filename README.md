@@ -104,13 +104,13 @@ Playwright over CDP.
 ```
 frontend/src            React SPA, 24 lazy-loaded route screens
 backend/dreamjob
-  api/routers           22 routers, 337 routes
+  api/routers           23 routers, 364 paths
   pipeline              intake · enrichment · planning · collection · profiling
                         · domains · employer kind · financial · opportunities ·
                         scoring · contacts · generation · autopilot
   adapters              30 source adapters over one four-step contract
   documents             CV, briefing, motivation and email generation
-  mail                  Gmail OAuth and Resend behind one interface
+  mail                  Gmail OAuth and Resend behind one interface; read-only Microsoft 365 inbox
   postapp               pipeline board, replies, learning, mock interviews
   browser               CDP / Playwright attach-only automation
   intelligence          gap analysis, stepping stones, values, events
