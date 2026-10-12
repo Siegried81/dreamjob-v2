@@ -168,7 +168,10 @@ specific URL — and the screen makes each one traceable and editable (FR-125).
 
 **Online enrichment** (FR-122) searches for the job seeker using name,
 employers, locations and declared handles as anchors: personal site,
-repositories, newsletters, publications, talks, press.
+repositories, newsletters, publications, talks, press. The search goes to the
+API an administrator configured for contact discovery (Brave, Bing or Google
+CSE) when one is switched on, and to DuckDuckGo's keyless HTML endpoint
+otherwise or when the API fails.
 
 **Identity matching is the risk that matters here** (FR-123, RK-02). A namesake's
 career must never reach a CV. Every finding is scored on multiple independent
@@ -924,8 +927,10 @@ Carried forward honestly rather than closed:
   `security.txt` sources need no key; the search source is what reaches the
   F5/Cloudflare-protected sites, and without a key those companies are recorded
   as `blocked` rather than silently contactless.
-- **DuckDuckGo search** returns a bot-check page from datacentre ranges, so
-  FR-122 degrades to declared and handle-derived URLs in such an environment.
+- **DuckDuckGo search**, used by FR-122 when no search provider is switched on,
+  returns a bot-check page from datacentre ranges, so enrichment then degrades
+  to declared and handle-derived URLs. Configuring the provider on the Contacts
+  screen (administrators) removes the dependency.
 
 ---
 

@@ -32,6 +32,8 @@ import {
 import WorkflowMap from '../components/WorkflowMap'
 import BrowseContacts from './contact/BrowseContacts'
 import EmailCertaintyBadge from './contact/EmailCertaintyBadge'
+import SearchProviderForm from './contact/SearchProviderForm'
+import { useSession } from '../session'
 
 // The company chooser asks for one page of the knowledge-base browser. 100 is
 // the maximum GET /api/companies allows (FR-345); asking for more is answered
@@ -47,8 +49,14 @@ const TABS = [
   { key: 'privacy', label: 'Objections & retention' },
 ]
 
+// The search API is a deployment credential: only an administrator sees its tab
+// (the endpoints answer 403 to anyone else).
+const ADMIN_TABS = [{ key: 'search', label: 'Search provider' }]
+
 export default function ContactsPage() {
   const [tab, setTab] = useState('contacts')
+  const { session } = useSession()
+  const tabs = session?.is_admin ? [...TABS, ...ADMIN_TABS] : TABS
   const journey = useFetch(() => api.get('/overview/journey').catch(() => null), [])
 
   return (
@@ -58,13 +66,14 @@ export default function ContactsPage() {
       )}
 
       <ScreenIntro pathname="/contacts" />
-      <Tabs tabs={TABS} active={tab} onChange={setTab} />
+      <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
       {tab === 'contacts' && <ContactList />}
       {tab === 'browse' && <BrowseContacts />}
       {tab === 'introductions' && <IntroductionRoutes mode="opportunity" />}
       {tab === 'network' && <NetworkImport />}
       {tab === 'privacy' && <PrivacyPanel />}
+      {tab === 'search' && session?.is_admin && <SearchProviderForm />}
     </div>
   )
 }

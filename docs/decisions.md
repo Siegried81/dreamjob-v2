@@ -91,3 +91,31 @@ opportunity is now placed on the map by a `geolocation` scheduler task
 `geocode.py` already does; migration 158), which replaces the manual locate
 button. This is a new background process that sends requests to a third party.
 
+## 2026-10-12 — a boolean app setting switched off now reads as off
+
+**The bug.** `knowledge.set_setting` wrote every non-container value with
+`str()`, so `False` was stored as the text `False`. That is not JSON, so
+`get_setting` returned the string `"False"`, and every reader that wraps it in
+`bool()` saw `True`. An administrator who switched the contact search provider
+off (`PUT /api/contacts/search-provider` with `enabled: false`) left it on;
+the contacts lookup service and continuous collection (`pipeline/continuous.py`)
+read their switches the same way. Proved by
+`tests/unit/test_search_provider_enrichment.py`, which fails on the old code.
+
+**The fix.** Booleans are now written as JSON (`true`/`false`), and the two
+legacy texts `True`/`False` already stored in a database are read back as
+booleans, so existing installations are corrected without a migration.
+
+**What changes for a reader.** A switch that was turned off and kept running
+now stops. Nothing that was on changes.
+
+## 2026-10-12 — profile enrichment uses the configured search provider
+
+`pipeline/enrichment.web_search` asks the search API configured for FR-303
+(Brave, Bing or Google CSE) when it is switched on, and DuckDuckGo otherwise
+or when the API fails for a query. Enrichment queries contain the job seeker's
+name; they already left the machine for DuckDuckGo under the FR-126
+enrichment consent, and now go to the provider the administrator chose
+instead. The request shape per provider lives once, in
+`email_patterns.provider_query`, shared with the contacts search.
+

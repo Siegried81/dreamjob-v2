@@ -681,15 +681,26 @@ def count_vacancies(
 # ---------------------------------------------------------------------------
 
 
+#: How ``set_setting`` wrote a boolean before it wrote JSON.  ``"False"`` is not
+#: JSON, so it came back as the string ``"False"`` - truthy - and a switch an
+#: administrator turned off read as on.  Rows written that way are still read
+#: correctly through this map.
+_LEGACY_BOOLEANS = {"True": True, "False": False}
+
+
 def get_setting(key: str, default: Any = None) -> Any:
     row = query_one("SELECT value FROM app_setting WHERE key = ?", (key,))
     if row is None:
         return default
+    if row["value"] in _LEGACY_BOOLEANS:
+        return _LEGACY_BOOLEANS[row["value"]]
     return from_json(row["value"], row["value"])
 
 
 def set_setting(key: str, value: Any) -> None:
-    payload = to_json(value) if isinstance(value, (dict, list)) else str(value)
+    # Booleans are written as JSON (``true``/``false``) so they read back as
+    # booleans; ``str(False)`` read back as a non-empty, truthy string.
+    payload = to_json(value) if isinstance(value, (dict, list, bool)) else str(value)
     with write_tx() as conn:
         conn.execute(
             "INSERT INTO app_setting (key, value, updated_at) VALUES (?, ?, ?) "

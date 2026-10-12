@@ -4,8 +4,10 @@ The pipeline is four steps:
 
 1. **Anchors** - name variants, employers, locations, schools, declared URLs and
    the career date span are read out of the profile (``identity_match``).
-2. **Search** - the open web is queried for the job seeker through DuckDuckGo's
-   HTML endpoint, which needs no API key.  Queries are built from the anchors,
+2. **Search** - the open web is queried for the job seeker through the search
+   API an administrator configured for FR-303 (Brave, Bing or Google CSE) when
+   one is switched on, and through DuckDuckGo's HTML endpoint, which needs no
+   key, otherwise or when the API fails.  Queries are built from the anchors,
    not from a fixed template, so a profile with two employers produces two
    employer queries and one with ten produces ten.
 3. **Fetch and extract** - every candidate page goes through ``EgressClient``
@@ -28,7 +30,8 @@ Two things this module deliberately does *not* do:
   report and the composite builder falls back to user-supplied data only.
 
 Search availability is treated as a degradation, not an error.  DuckDuckGo
-serves a bot-check page to datacentre IP ranges; when that happens the search
+serves a bot-check page to datacentre IP ranges - the reason a configured
+search API is preferred; when that happens the search
 step reports itself unavailable and enrichment continues against the anchor
 URLs the profile already declares plus the handle-derived candidates, which is
 where the highest-value findings (personal site, repositories, newsletter) live
@@ -429,7 +432,7 @@ def _platform_url(platform: str, handle: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Search (FR-122) - DuckDuckGo HTML endpoint, no API key
+# Search (FR-122) - the configured search API, else DuckDuckGo's HTML endpoint
 # ---------------------------------------------------------------------------
 
 
@@ -524,6 +527,30 @@ async def duckduckgo_search(
     if not result.ok:
         raise SearchUnavailable(f"search endpoint returned HTTP {result.status_code}")
     return parse_ddg_results(result.text, query)[:max_results]
+
+
+async def web_search(
+    egress: EgressClient, query: str, *, max_results: int = 10
+) -> list[SearchHit]:
+    """One enrichment query: the administrator's search API if one is on, else DuckDuckGo.
+
+    The API (Brave, Bing or Google CSE, configured on the Contacts screen for
+    FR-303) answers from datacentre ranges, where DuckDuckGo's HTML endpoint
+    serves a bot check.  When it is switched off, or fails for this query,
+    DuckDuckGo is asked as before, so nothing that worked stops working.
+    """
+    from dreamjob.pipeline import email_patterns  # noqa: PLC0415 - avoids a cycle
+
+    if email_patterns.search_enabled():
+        pairs = await email_patterns.provider_query(egress, query, max_results=max_results)
+        if pairs is not None:
+            return [
+                SearchHit(url=url, title="", snippet=snippet, query=query, rank=rank)
+                for rank, (url, snippet) in enumerate(pairs[:max_results], start=1)
+                if url.startswith("http")
+            ]
+        log.info("Configured search provider failed for %r; trying DuckDuckGo", query)
+    return await duckduckgo_search(egress, query, max_results=max_results)
 
 
 # ---------------------------------------------------------------------------
@@ -763,7 +790,7 @@ async def run_enrichment(
     async with EgressClient() as egress:
         for query in report.queries:
             try:
-                hits = await duckduckgo_search(egress, query, max_results=8)
+                hits = await web_search(egress, query, max_results=8)
             except SearchUnavailable as exc:
                 report.search_available = False
                 report.degradation_reason = str(exc)
