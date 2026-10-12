@@ -2,10 +2,13 @@
 
 Four surfaces:
 
-* ``/status``, ``/accounts``, ``/gmail/*``, ``/imap/*`` - connecting and
-  disconnecting a mailbox.  ``/gmail/callback`` is the loopback redirect target
-  and is the one route here without a session: the browser arrives from Google,
-  and the single-use ``state`` row is what identifies the job seeker (NFR-204).
+* ``/status``, ``/accounts``, ``/gmail/*``, ``/m365/*``, ``/imap/*`` -
+  connecting and disconnecting a mailbox.  ``/gmail/callback`` and
+  ``/m365/callback`` are the loopback redirect targets and the only routes
+  here without a session: the browser arrives from Google or Microsoft, and the
+  single-use ``state`` row is what identifies the job seeker (NFR-204).  The
+  Microsoft 365 connection is read-only: it feeds reply and bounce detection
+  and is never chosen to send.
   ``/imap/connect`` is the equivalent for a provider with no OAuth programme -
   Yahoo, iCloud, a self-hosted server - which issues an application password
   instead; it verifies the credential against the provider before storing it.
@@ -30,7 +33,7 @@ from pydantic import BaseModel, Field, SecretStr
 from dreamjob.api.deps import CurrentSeeker, current_admin, current_seeker
 from dreamjob.api.routers.logs import _FixedWindow
 from dreamjob.db.repositories import dispatch as repo
-from dreamjob.mail import gmail, imap_basic, inbox, resend_backend
+from dreamjob.mail import gmail, imap_basic, inbox, m365, resend_backend
 from dreamjob.mail.base import (
     MailBackendError,
     MailBackendNotConfigured,
@@ -158,6 +161,8 @@ def revoke_account(account_id: str, seeker: CurrentSeeker = Depends(current_seek
         # An app password has no revocation endpoint; the result carries the
         # provider page where the job seeker finishes the job themselves.
         result = imap_basic.disconnect(account)
+    elif account["backend"] == m365.BACKEND_KEY:
+        result = m365.disconnect(account)
     else:
         repo.clear_credentials(account_id)
         result = {"revoked_locally": True, "revoked_at_google": False}
@@ -182,6 +187,8 @@ def delete_account(account_id: str, seeker: CurrentSeeker = Depends(current_seek
             gmail.revoke(account)
         elif account["backend"] == imap_basic.BACKEND_KEY:
             imap_basic.disconnect(account)
+        elif account["backend"] == m365.BACKEND_KEY:
+            m365.disconnect(account)
     repo.delete_account(account_id, seeker.id)
     record_audit(
         "mail_account.deleted",
@@ -304,6 +311,48 @@ def gmail_callback(
         detail={"address": account["address"], "scopes": account["scopes"]},
     )
     return _callback_page(f"{account['address']} is connected. You can close this tab.", ok=True)
+
+
+# --- Microsoft 365, read-only over Graph (FR-326, NFR-204) -----------------
+
+
+@router.get("/m365/authorize")
+def m365_authorize(seeker: CurrentSeeker = Depends(current_seeker)) -> dict:
+    """Begin the authorisation-code flow; the client opens the returned URL."""
+    try:
+        return m365.authorization_url(seeker.id, login_hint=seeker.email)
+    except MailBackendNotConfigured as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.get("/m365/callback", include_in_schema=False)
+def m365_callback(
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    error_description: str | None = None,
+) -> HTMLResponse:
+    """The loopback redirect target; the ``state`` row identifies the job seeker."""
+    if error:
+        return _callback_page(
+            f"Microsoft reported: {error} {error_description or ''}".strip(), ok=False
+        )
+    if not code or not state:
+        return _callback_page("The callback arrived without a code or state.", ok=False)
+    try:
+        account = m365.complete_authorization(state, code)
+    except MailBackendError as exc:
+        return _callback_page(str(exc), ok=False)
+    record_audit(
+        "mail_account.connected",
+        "mail_account",
+        account["id"],
+        seeker_id=account["job_seeker_id"],
+        detail={"address": account["address"], "scopes": account["scopes"], "read_only": True},
+    )
+    return _callback_page(
+        f"{account['address']} is connected, read-only. You can close this tab.", ok=True
+    )
 
 
 def _callback_page(message: str, *, ok: bool) -> HTMLResponse:

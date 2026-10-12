@@ -48,6 +48,7 @@ from dreamjob.mail.base import (
     MailBackendNotConfigured,
     OutgoingMessage,
     SendResult,
+    all_capabilities,
     backend_for_account,
 )
 from dreamjob.security.audit import log_metric, record_audit
@@ -340,7 +341,12 @@ def check_send_allowed(
 
 def resolve_backend(job_seeker_id: str, backend_key: str | None = None) -> tuple[MailBackend, dict]:
     """The mailbox this job seeker sends from, and the account row behind it."""
-    account = repo.active_account(job_seeker_id, backend_key)
+    read_only = [c.key for c in all_capabilities() if not c.can_send]
+    if backend_key in read_only:
+        # Asked for by name, a read-only mailbox is refused outright rather than
+        # quietly replaced by the relay below.
+        raise MailBackendError(f"{backend_key} is a read-only connection; it cannot send.")
+    account = repo.active_account(job_seeker_id, backend_key, exclude=read_only)
     if account is None:
         fallback = backend_key or get_settings().mail_backend
         # Both personal backends need a mailbox row; only the relay can run

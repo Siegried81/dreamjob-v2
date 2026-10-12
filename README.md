@@ -133,11 +133,11 @@ than aspirational:
 | employer-kind verdict | `pipeline/employer_resolver.py` | no verdict without evidence |
 | company-domain decision | `pipeline/company_domains.py` | a namesake domain is refused, visibly |
 
-**Scale** (re-derived 2026-10-06; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
-`tests/**/*.py`): 237 Python modules / 123,729 lines ·
-143 JS modules / 44,424 lines · 126 test files / 64,624 lines ·
-**2,146 of 2,206 tests pass offline** · 99 tables · 157 indexes ·
-43 migrations · 35 adapter modules · 24 versioned prompt templates.
+**Scale** (re-derived 2026-10-12; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
+`tests/**/*.py`): 242 Python modules / 127,225 lines ·
+144 JS modules / 44,717 lines · 136 test files / 67,875 lines ·
+**2,323 of 2,347 tests pass offline** · 101 tables · 158 indexes ·
+45 migrations · 35 adapter modules · 24 versioned prompt templates.
 **156 of 157 requirements (99%)** from the specification are cited in the
 source: 103/104 Must, 44/44 Should, 9/9 Could.
 
@@ -174,7 +174,7 @@ SQLite in WAL mode with a deliberate **one-writer** discipline; repositories are
 the only place SQL is written, and return plain dicts. 90 logical tables across
 43 forward-only migrations: 48 seeker-scoped (they carry `job_seeker_id`),
 39 shared knowledge-base, one migration ledger and two FTS5 search tables. The
-nine FTS5 shadow tables bring `sqlite_master` to the 99 tables counted above.
+nine FTS5 shadow tables bring `sqlite_master` to the 101 tables counted above.
 Plus a `usable_contact` view that encodes the objection rule at the database.
 
 ### Security
@@ -241,6 +241,11 @@ attaches and never sees your credentials.
   the Mail setup screen. Replies land in your own inbox and are detected.
 - *Resend* — set `RESEND_API_KEY`. Sends from your own domain; no inbox, so
   replies are recorded by webhook or entered by hand.
+
+**Reading a Microsoft 365 / Outlook.com inbox** — read-only, for reply and
+bounce detection: register an app as described in
+[docs/M365_Mail_Setup.md](docs/M365_Mail_Setup.md), set `M365_CLIENT_ID`, then
+connect through `GET /api/mail/m365/authorize`. It never sends.
 
 `DREAMJOB_MAIL_DRY_RUN` defaults to `true`: the whole path runs — recipient,
 guard rails, MIME with the CV attached — and stops one step short of the wire.
@@ -319,7 +324,7 @@ can show what is in force. Groups include:
 - **Core** — `DREAMJOB_ENV`, `DREAMJOB_HOST`, `DREAMJOB_PORT`, `DREAMJOB_DATA_DIR`, `DREAMJOB_DB_PATH`
 - **Keys** — `DREAMJOB_MASTER_KEY`, `DREAMJOB_SESSION_SECRET`
 - **LLM** — `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, cheap/strong model names, `DREAMJOB_LOCAL_LLM_*`, `DREAMJOB_EMBEDDINGS_*`, budget and cost
-- **Mail** — `DREAMJOB_MAIL_BACKEND`, `DREAMJOB_MAIL_DRY_RUN`, `GMAIL_*`, `RESEND_API_KEY`, `DREAMJOB_SEND_DAILY_CAP`, send window and interval
+- **Mail** — `DREAMJOB_MAIL_BACKEND`, `DREAMJOB_MAIL_DRY_RUN`, `GMAIL_*`, `M365_*`, `RESEND_API_KEY`, `DREAMJOB_SEND_DAILY_CAP`, send window and interval
 - **Egress** — user agent, per-domain RPS, concurrency, cache and negative-cache TTL, `DREAMJOB_VACANCY_CACHE_TTL_SECONDS` (freshness window for vacancy fetches), robots and crawl-delay flags, raw-document retention
 - **Browser** — `DREAMJOB_CDP_URL`, profile directory, human pacing bounds
 - **Scheduler** — `DREAMJOB_SCHEDULER_ENABLED`, `DREAMJOB_SCHEDULER_TICK_SECONDS`, `DREAMJOB_VACANCY_REFRESH_SECONDS` (0 turns the vacancy refresh off)
@@ -412,8 +417,11 @@ Stated rather than glossed:
   intermediary's company dimensions, but company profiling and financial passes
   do not yet skip an agency outright.
 - **Semantic search is built but not consumed** by scoring or the API yet.
-- **Microsoft 365 mail is not implemented**, and the Microsoft 365 calendar
-  Graph client cannot be connected because its OAuth exchange is not exposed.
+- **Microsoft 365 mail is read-only and API-only.** A Microsoft inbox can be
+  connected (after the app registration in `docs/M365_Mail_Setup.md`) and is
+  polled for replies and bounces, Inbox folder only; it cannot send, job
+  alerts are still read from Gmail only, and the Mail screen has no button for
+  it yet. The Microsoft 365 calendar Graph client still cannot be connected.
 - **DuckDuckGo search** returns a bot-check page from datacentre ranges, so
   profile enrichment degrades to declared and handle-derived URLs there.
 
@@ -428,6 +436,7 @@ Stated rather than glossed:
 | [DPIA](docs/DPIA.md) | Data-protection impact assessment (NFR-304) |
 | [Collection outcome states](docs/Collection_Outcome_States.md) | What every collection result means |
 | [Employer kind results](docs/Employer_Kind_Results.md) | Agency classification, measured |
+| [Microsoft 365 mail setup](docs/M365_Mail_Setup.md) | The app registration a read-only Microsoft inbox needs |
 | Word editions | `docs/Dream_Job_Functional_Design.docx`, `docs/Dream_Job_Technical_Architecture.docx` — illustrated, generated from the markdown by `docs/build_fdd.py` and `docs/build_ta.py` |
 
 ---

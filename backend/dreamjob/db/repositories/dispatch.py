@@ -122,13 +122,23 @@ def get_account_any(account_id: str) -> dict | None:
     return query_one("SELECT * FROM mail_account WHERE id = ?", (account_id,))
 
 
-def active_account(job_seeker_id: str, backend: str | None = None) -> dict | None:
-    """The mailbox a send should leave from (FR-325: the job seeker's own)."""
+def active_account(
+    job_seeker_id: str, backend: str | None = None, *, exclude: Sequence[str] = ()
+) -> dict | None:
+    """The mailbox a send should leave from (FR-325: the job seeker's own).
+
+    ``exclude`` names backends that must never be chosen - the caller passes
+    the read-only ones, read from their capabilities, so a connected mailbox
+    that cannot send is never picked over the relay.
+    """
     sql = "SELECT * FROM mail_account WHERE job_seeker_id = ? AND is_active = 1"
     params: list[Any] = [job_seeker_id]
     if backend:
         sql += " AND backend = ?"
         params.append(backend)
+    if exclude:
+        sql += f" AND backend NOT IN ({', '.join('?' * len(exclude))})"
+        params.extend(exclude)
     # A connected personal mailbox outranks the shared relay: replies must land
     # in the job seeker's own inbox (section 2.4, RK-05).  Both personal
     # backends rank equally - gmail_oauth and imap_basic differ in how the

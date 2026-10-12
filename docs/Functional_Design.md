@@ -661,6 +661,12 @@ Two backends behind one interface:
 | Credentials | Refresh token, encrypted per job seeker, revocable | API key |
 | Scopes | `gmail.send` + `gmail.readonly` for bounce reading | — |
 
+A third connection, **Microsoft 365 / Outlook.com over Graph**, is read-only:
+it holds `Mail.Read`, `User.Read` and `offline_access` only, refuses a token
+that could write, only ever issues `GET` against the mailbox, and is never
+chosen to send. It exists so that replies to a job seeker whose inbox is
+Microsoft's are still detected (FR-326).
+
 > **Note.** The Resend backend is complete but the API key has not yet been
 > supplied. It fails with an actionable message and the status screen reports
 > "not configured" rather than showing a broken state.
@@ -913,9 +919,14 @@ Carried forward honestly rather than closed:
   `Employer_Kind_Results.md`.
 - **Semantic search is built but not consumed.** The embedding table, backfill
   script and cosine query exist; nothing in scoring or the API reads them yet.
-- **Microsoft 365 mail** is not implemented, and the Microsoft 365 **calendar
-  Graph client is implemented but not connectable** because its OAuth exchange
-  is not exposed. Gmail and Google Calendar are wired end to end.
+- **Microsoft 365 mail is read-only.** A Microsoft 365 or Outlook.com inbox
+  connects over Graph with `Mail.Read` only (`mail/m365.py`) and is polled for
+  replies and bounces, Inbox folder only; it never sends, the dispatcher never
+  picks it, job alerts are still read from Gmail only, and it needs an app
+  registration the administrator creates (`docs/M365_Mail_Setup.md`). The
+  Microsoft 365 **calendar Graph client is implemented but not connectable**
+  because its OAuth exchange is not exposed. Gmail and Google Calendar are
+  wired end to end.
 - **Bulk register and board importers are operator scripts**, run by hand rather
   than on the scheduler, so the company inventory widens when an operator runs
   them.
