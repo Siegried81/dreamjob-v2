@@ -161,3 +161,27 @@ adverts the mechanical terms rate alike, not to outvote them.
 **What would reverse it.** A per-model calibration of the cosine, after which
 the term could be on by default - with a re-score, since scores before and
 after would not be comparable.
+
+## 2026-10-12 — French companies are read from recherche-entreprises.api.gouv.fr
+
+**What changed.** `registry.recherche_entreprises` is the registry for `FR` in
+`pipeline/financial.REGISTRIES_BY_JURISDICTION`. Until now a French company
+fell through to OpenCorporates and the FR-245 estimated path; on its next
+financial pass it gets the register's identity (SIREN, NAF code, headcount
+band) and, where published, revenue and net result written as registry
+figures, not estimates. Stored rows do not change until that pass runs.
+
+**What a number means.** The ability-to-pay and trajectory figures of a French
+company that has published accounts now rest on two registry fields (revenue,
+net result) instead of secondary signals. Components that need a balance sheet
+or personnel costs stay unknown - the API publishes neither. `size_fte` is the
+lower bound of INSEE's headcount band, not a measured headcount.
+
+**Why this source.** It is the State's own free, keyless API (DINUM) over INSEE
+Sirene and the INPI RNE, under the Licence Ouverte. Germany was looked at and
+skipped: the Handelsregister has no official API and its terms cap retrieval at
+60 an hour.
+
+**What would reverse it.** Removing the `FR` entry sends French companies back
+to the estimated path; the adapter itself stays harmless.
+
