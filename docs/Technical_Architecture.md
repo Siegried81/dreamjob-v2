@@ -58,7 +58,7 @@ of taking those constraints seriously rather than working around them.
 ├───────────────┴──────────────┴───────────────┴──────────────┴────────┤
 │  Repositories    the only place SQL is written                       │
 ├──────────────────────────────────────────────────────────────────────┤
-│  SQLite (WAL)    99 tables · 157 indexes │  Filesystem: raw docs,    │
+│  SQLite (WAL)  101 tables · 158 indexes │  Filesystem: raw docs,    │
 │  private ▸ seeker, per query            │  generated CVs and PDFs,   │
 │  shared  ▸ knowledge base, no link back │  uploads, exports          │
 └──────────────────────────────────────────────────────────────────────┘
@@ -67,9 +67,9 @@ of taking those constraints seriously rather than working around them.
    (or local)     ATS / sites     NBB, KBO…     Resend
 ```
 
-**Scale** (re-derived 2026-10-06; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
-`tests/**/*.py`). 237 Python modules / 123,729 lines · 143 JS modules /
-44,424 lines · 126 test files / 64,624 lines · 43 migrations · 24 versioned
+**Scale** (re-derived 2026-10-12; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
+`tests/**/*.py`). 241 Python modules / 126,903 lines · 144 JS modules /
+44,717 lines · 136 test files / 67,735 lines · 45 migrations · 24 versioned
 prompt templates · 35 declared source adapters, 29 of them enabled. The
 offline pass count is in `README.md`, which is where it is re-derived.
 
@@ -181,9 +181,11 @@ llm.complete_json(
   redaction sweep.
 - **Embeddings (FR-341).** `llm.embed()` writes one content-hash-keyed vector per
   entity into `embedding`, skipping unchanged content; nearest-neighbour search
-  is pure-Python cosine, so the feature needs no vector database. It is built and
-  backfilled by `scripts/build_semantic_index.py` but not yet consulted by
-  scoring or the API.
+  is pure-Python cosine, so the feature needs no vector database. It is
+  backfilled by `scripts/build_semantic_index.py`, read by
+  `GET /api/opportunities/semantic` (restricted to the seeker's own
+  opportunities through `opportunities.vacancy_links`), and by scoring only
+  when `DREAMJOB_SEMANTIC_SCORING` is on (`scoring.embedding_relevance`).
 
 Prompts are versioned `.md` templates with a metadata header (NFR-602); the
 version travels into `llm_call.prompt_version`, so a regression in generated
@@ -389,7 +391,7 @@ profiled as if it were the client.
 
 | Requirement | Approach |
 |---|---|
-| NFR-101 interactive views < 2s at p95 | 157 indexes; FTS5 for search; deterministic pre-rank avoids an LLM call per row; lazy routes keep first paint small |
+| NFR-101 interactive views < 2s at p95 | 158 indexes; FTS5 for search; deterministic pre-rank avoids an LLM call per row; lazy routes keep first paint small |
 | NFR-102 ≥20 concurrent HTTP workers, serialised writes | Semaphore-bounded async egress; one global write lock under WAL |
 | NFR-103 typical campaign < 4 hours | Caps bound the work; ATS JSON is cheap; **not yet measured against a real campaign** |
 | NFR-104 bounded LLM spend | Pre-flight check, post-call debit, graceful degradation |
@@ -399,8 +401,8 @@ profiled as if it were the client.
 
 ## 9. Testing
 
-**2,240 tests collected, 64,624 lines across 126 files** (`tests/**/*.py`,
-re-counted 2026-10-06; `-m 'not llm and not load'` deselects 14, leaving 2,226.
+**2,387 tests collected, 67,735 lines across 136 files** (`tests/**/*.py`,
+re-counted 2026-10-12; `-m 'not llm and not load'` deselects 14, leaving 2,373.
 The offline pass count is in `README.md`, which is where it is re-derived).
 Each runs against a migrated temporary database and without network access; LLM
 and HTTP paths are stubbed or skipped, and the network and load tests are
@@ -447,7 +449,7 @@ normalised, and the dream-job model generated through the live DeepSeek API.
 | A calendar provider | Implement the client and wire the OAuth exchange | One file |
 | A language | Add to the prompt templates and `help/content.js` | Content only |
 | A local model | Set `DREAMJOB_LOCAL_LLM_*` and list the task groups | Configuration |
-| Semantic search | Set `DREAMJOB_EMBEDDINGS_*` and run `scripts/build_semantic_index.py` | Config + script |
+| Semantic search | Set `DREAMJOB_EMBEDDINGS_*` and run `scripts/build_semantic_index.py`; `DREAMJOB_SEMANTIC_SCORING=true` to let it score | Config + script |
 | A scheduler task | Add a `Task` with an interval to `DEFAULT_TASKS` | `monitoring/scheduler.py` |
 | A bulk employer import | An operator script against the shared knowledge base | One script |
 | An account lifecycle action | Add to `auth_service` behind `current_admin` | Service + router |
