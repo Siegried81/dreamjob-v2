@@ -108,7 +108,7 @@ backend/dreamjob
   pipeline              intake · enrichment · planning · collection · profiling
                         · domains · employer kind · financial · opportunities ·
                         scoring · contacts · generation · autopilot
-  adapters              29 source adapters over one four-step contract
+  adapters              30 source adapters over one four-step contract
   documents             CV, briefing, motivation and email generation
   mail                  Gmail OAuth and Resend behind one interface
   postapp               pipeline board, replies, learning, mock interviews
@@ -134,9 +134,9 @@ than aspirational:
 | company-domain decision | `pipeline/company_domains.py` | a namesake domain is refused, visibly |
 
 **Scale** (re-derived 2026-10-12; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
-`tests/**/*.py`): 242 Python modules / 126,931 lines ·
-144 JS modules / 44,717 lines · 136 test files / 67,701 lines ·
-**2,328 of 2,352 tests pass offline** · 101 tables · 158 indexes ·
+`tests/**/*.py`): 244 Python modules / 128,284 lines ·
+147 JS modules / 45,056 lines · 140 test files / 69,219 lines ·
+**2,389 of 2,413 tests pass offline** · 101 tables · 158 indexes ·
 45 migrations · 36 adapter modules · 24 versioned prompt templates.
 **156 of 157 requirements (99%)** from the specification are cited in the
 source: 103/104 Must, 44/44 Should, 9/9 Could.
@@ -173,9 +173,9 @@ provider, once switched on, also serves profile enrichment's searches. A blocked
 ### Persistence
 
 SQLite in WAL mode with a deliberate **one-writer** discipline; repositories are
-the only place SQL is written, and return plain dicts. 90 logical tables across
-43 forward-only migrations: 48 seeker-scoped (they carry `job_seeker_id`),
-39 shared knowledge-base, one migration ledger and two FTS5 search tables. The
+the only place SQL is written, and return plain dicts. 92 logical tables across
+45 forward-only migrations: 49 seeker-scoped (they carry `job_seeker_id`),
+40 shared knowledge-base, one migration ledger and two FTS5 search tables. The
 nine FTS5 shadow tables bring `sqlite_master` to the 101 tables counted above.
 Plus a `usable_contact` view that encodes the objection rule at the database.
 

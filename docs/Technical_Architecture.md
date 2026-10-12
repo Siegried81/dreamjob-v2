@@ -50,7 +50,7 @@ of taking those constraints seriously rather than working around them.
 │                  post-application                                    │
 ├───────────────┬──────────────┬───────────────┬──────────────┬────────┤
 │  LLMClient    │ EgressClient │ SourceAdapter │  JobRunner   │ crypto │
-│  budget       │ robots       │ 29 adapters   │  resumable   │ AES-   │
+│  budget       │ robots       │ 30 adapters   │  resumable   │ AES-   │
 │  redaction    │ rate limit   │ plan/fetch/   │  pause/      │ GCM    │
 │  injection    │ cache        │ parse/        │  cancel      │ per    │
 │  fencing      │ raw capture  │ normalise     │  checkpoint  │ seeker │
@@ -68,8 +68,8 @@ of taking those constraints seriously rather than working around them.
 ```
 
 **Scale** (re-derived 2026-10-12; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
-`tests/**/*.py`). 242 Python modules / 126,931 lines · 144 JS modules /
-44,717 lines · 136 test files / 67,701 lines · 45 migrations · 24 versioned
+`tests/**/*.py`). 244 Python modules / 128,284 lines · 147 JS modules /
+45,056 lines · 140 test files / 69,219 lines · 45 migrations · 24 versioned
 prompt templates · 36 declared source adapters, 30 of them enabled. The
 offline pass count is in `README.md`, which is where it is re-derived.
 
@@ -106,22 +106,22 @@ at the boundary. Migrations are forward-only `NNN_name.sql` files with a
 recorded checksum; editing an applied migration is a warning, not a silent
 divergence.
 
-**Schema shape.** 90 logical tables across 43 migrations — 48 seeker-scoped, 39
+**Schema shape.** 92 logical tables across 45 migrations — 49 seeker-scoped, 40
 shared, one migration ledger, and two FTS5 virtual tables; the nine FTS5 shadow
-tables take `sqlite_master` to 99 — plus a
+tables take `sqlite_master` to 101 — plus a
 `usable_contact` view that encodes the objection rule at the database:
 
 - **Private** — carry `job_seeker_id`: profile and versions, conflicts, skills,
   evidence, personas, enrichment findings, composite profile, dream job model,
   directives, campaigns, plan items, opportunities, application packages,
   dispatches, replies, pipeline cards, mock interviews, gap analyses, exports,
-  watchlist entries and apply selections.
+  watchlist entries, apply selections and the apply preference.
 - **Shared** — the knowledge base, carrying **no** link back to a job seeker:
   companies, company domains and domain candidates, financial years and
   analyses, competitor links, hiring signals, employer-kind verdicts and
   resolution attempts, registry identity, review summaries, vacancies,
   compensation observations, board registry, company seed, embeddings, raw
-  documents, events and source catalogue.
+  documents, events, geocoded places and source catalogue.
 - **Restricted** — `contact`, which is shared *except* when collected through
   browser automation, where `shareable = 0`, `owning_campaign_id` is set and
   `retention_until` applies (NFR-303).
@@ -402,8 +402,8 @@ profiled as if it were the client.
 
 ## 9. Testing
 
-**2,400 tests collected, 67,701 lines across 136 files** (`tests/**/*.py`,
-re-counted 2026-10-12; `-m 'not llm and not load'` deselects 14, leaving 2,386.
+**2,461 tests collected, 69,219 lines across 140 files** (`tests/**/*.py`,
+re-counted 2026-10-12; `-m 'not llm and not load'` deselects 14, leaving 2,447.
 The offline pass count is in `README.md`, which is where it is re-derived).
 Each runs against a migrated temporary database and without network access; LLM
 and HTTP paths are stubbed or skipped, and the network and load tests are
