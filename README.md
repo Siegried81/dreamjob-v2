@@ -244,6 +244,11 @@ attaches and never sees your credentials.
 - *Resend* — set `RESEND_API_KEY`. Sends from your own domain; no inbox, so
   replies are recorded by webhook or entered by hand.
 
+**Reading a Microsoft 365 / Outlook.com inbox** — read-only, for reply and
+bounce detection: register an app as described in
+[docs/M365_Mail_Setup.md](docs/M365_Mail_Setup.md), set `M365_CLIENT_ID`, then
+connect through `GET /api/mail/m365/authorize`. It never sends.
+
 `DREAMJOB_MAIL_DRY_RUN` defaults to `true`: the whole path runs — recipient,
 guard rails, MIME with the CV attached — and stops one step short of the wire.
 Arming a real send is a deliberate change of that setting plus a restart.
@@ -327,7 +332,7 @@ can show what is in force. Groups include:
 - **Core** — `DREAMJOB_ENV`, `DREAMJOB_HOST`, `DREAMJOB_PORT`, `DREAMJOB_DATA_DIR`, `DREAMJOB_DB_PATH`
 - **Keys** — `DREAMJOB_MASTER_KEY`, `DREAMJOB_SESSION_SECRET`
 - **LLM** — `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, cheap/strong model names, `DREAMJOB_LOCAL_LLM_*`, `DREAMJOB_EMBEDDINGS_*`, budget and cost
-- **Mail** — `DREAMJOB_MAIL_BACKEND`, `DREAMJOB_MAIL_DRY_RUN`, `GMAIL_*`, `RESEND_API_KEY`, `DREAMJOB_SEND_DAILY_CAP`, send window and interval
+- **Mail** — `DREAMJOB_MAIL_BACKEND`, `DREAMJOB_MAIL_DRY_RUN`, `GMAIL_*`, `M365_*`, `RESEND_API_KEY`, `DREAMJOB_SEND_DAILY_CAP`, send window and interval
 - **Egress** — user agent, per-domain RPS, concurrency, cache and negative-cache TTL, `DREAMJOB_VACANCY_CACHE_TTL_SECONDS` (freshness window for vacancy fetches), robots and crawl-delay flags, raw-document retention
 - **Browser** — `DREAMJOB_CDP_URL`, profile directory, human pacing bounds
 - **Scheduler** — `DREAMJOB_SCHEDULER_ENABLED`, `DREAMJOB_SCHEDULER_TICK_SECONDS`, `DREAMJOB_VACANCY_REFRESH_SECONDS` (0 turns the vacancy refresh off)
@@ -428,8 +433,11 @@ Stated rather than glossed:
 - **Semantic scoring is off by default** and uncalibrated: the raw cosine of
   the chosen embeddings model is used as is. The search endpoint is live once
   the index is built; the interface does not call it yet.
-- **Microsoft 365 mail is not implemented**, and the Microsoft 365 calendar
-  Graph client cannot be connected because its OAuth exchange is not exposed.
+- **Microsoft 365 mail is read-only and API-only.** A Microsoft inbox can be
+  connected (after the app registration in `docs/M365_Mail_Setup.md`) and is
+  polled for replies and bounces, Inbox folder only; it cannot send, job
+  alerts are still read from Gmail only, and the Mail screen has no button for
+  it yet. The Microsoft 365 calendar Graph client still cannot be connected.
 - **Without a search provider, profile enrichment searches DuckDuckGo**, which
   returns a bot-check page from datacentre ranges, so enrichment degrades to
   declared and handle-derived URLs there. With a provider switched on (Contacts
@@ -447,6 +455,7 @@ Stated rather than glossed:
 | [DPIA](docs/DPIA.md) | Data-protection impact assessment (NFR-304) |
 | [Collection outcome states](docs/Collection_Outcome_States.md) | What every collection result means |
 | [Employer kind results](docs/Employer_Kind_Results.md) | Agency classification, measured |
+| [Microsoft 365 mail setup](docs/M365_Mail_Setup.md) | The app registration a read-only Microsoft inbox needs |
 | Word editions | `docs/Dream_Job_Functional_Design.docx`, `docs/Dream_Job_Technical_Architecture.docx` — illustrated, generated from the markdown by `docs/build_fdd.py` and `docs/build_ta.py` |
 
 ---

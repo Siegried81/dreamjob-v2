@@ -108,6 +108,14 @@ class Settings(BaseSettings):
     gmail_redirect_uri: str = Field(
         "http://127.0.0.1:8000/api/mail/gmail/callback", alias="GMAIL_REDIRECT_URI"
     )
+    # Microsoft 365 / Outlook.com, read-only over Graph (mail.m365).  The
+    # secret stays empty for the recommended public-client registration.
+    m365_client_id: str = Field("", alias="M365_CLIENT_ID")
+    m365_client_secret: str = Field("", alias="M365_CLIENT_SECRET")
+    m365_tenant: str = Field("common", alias="M365_TENANT")
+    m365_redirect_uri: str = Field(
+        "http://localhost:8000/api/mail/m365/callback", alias="M365_REDIRECT_URI"
+    )
     imap_host: str = Field("imap.gmail.com", alias="DREAMJOB_IMAP_HOST")
     imap_port: int = Field(993, alias="DREAMJOB_IMAP_PORT")
 

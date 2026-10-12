@@ -21,6 +21,12 @@ explicit rather than hidden:
     OAuth programme for third-party mail clients, and an application password
     is the credential it issues instead.
 
+``m365_graph``
+    A Microsoft 365 or Outlook.com mailbox read over Microsoft Graph with
+    ``Mail.Read`` only.  It cannot send (``can_send`` is ``False``, and the
+    dispatcher never chooses it); it exists so that replies and bounces reaching
+    a Microsoft inbox are still detected (FR-326).
+
 ``resend``
     A transactional relay on ``stepvda.com``.  It sends when no personal
     mailbox is connected; ``Reply-To`` still points at the job seeker, but the
@@ -381,4 +387,4 @@ def _load_backends() -> None:
     if _LOADED:
         return
     _LOADED = True
-    from dreamjob.mail import gmail, imap_basic, resend_backend  # noqa: F401,PLC0415
+    from dreamjob.mail import gmail, imap_basic, m365, resend_backend  # noqa: F401,PLC0415

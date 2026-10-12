@@ -5,9 +5,11 @@ opportunity status.  Two mechanisms feed one set of rules:
 
 * **Polling**, for any connected mailbox whose backend declares
   ``reply_detection == "poll"``.  ``poll_account`` reads what has arrived since
-  the last cursor over one of two transports:
+  the last cursor over one of three transports:
 
   - the Gmail API, with the ``gmail.readonly`` scope Dream Job requests;
+  - Microsoft Graph, with ``Mail.Read`` only, for an ``m365_graph`` mailbox
+    (see :mod:`dreamjob.mail.m365`);
   - IMAP with :mod:`imaplib`, for a ``gmail_oauth`` mailbox that already grants
     ``https://mail.google.com/`` (see :mod:`dreamjob.mail.gmail` for why that
     scope is not requested) and for every ``imap_basic`` mailbox - Yahoo,
@@ -50,7 +52,7 @@ import logging
 import re
 import ssl
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
 from email.utils import getaddresses, parsedate_to_datetime
 from typing import Any
@@ -609,7 +611,9 @@ def poll_account(account: dict, *, max_messages: int = 100) -> dict:
     # no API to fall back to, so IMAP is the only transport it has.
     use_imap = capabilities.requires_oauth is False or IMAP_SCOPE in scopes
     try:
-        if use_imap:
+        if capabilities.bounce_detection == "graph_api":
+            result = poll_graph_api(account, backend, max_messages=max_messages)
+        elif use_imap:
             result = poll_imap(account, backend, max_messages=max_messages)
         else:
             result = poll_gmail_api(account, backend, max_messages=max_messages)
@@ -678,6 +682,47 @@ def poll_gmail_api(account: dict, backend: Any, *, max_messages: int = 100) -> d
         },
     )
     return {"account_id": account["id"], "polled": seen, "transport": "gmail_api", **outcomes}
+
+
+def poll_graph_api(account: dict, backend: Any, *, max_messages: int = 100) -> dict:
+    """Poll a Microsoft 365 inbox through Graph: list since the cursor, fetch MIME, apply.
+
+    Read-only like every transport here: Graph is only ever sent ``GET``, which
+    neither marks a message read nor moves it.  The cursor is the previous
+    poll's time, re-read with a minute of overlap because
+    :func:`record_incoming` is idempotent - the Gmail transport's rule - and
+    the first poll looks back seven days.
+    """
+    state = repo.get_poll_state(account["id"]) or {}
+    last = state.get("last_polled_at")
+    since = (
+        datetime.fromisoformat(last) - timedelta(minutes=1)
+        if last
+        else datetime.now(UTC) - timedelta(days=7)
+    ).isoformat()
+
+    ids = backend.list_message_ids(since, max_results=max_messages)
+    outcomes = {"reply": 0, "bounced": 0, "deferred": 0, "auto_reply": 0, "objection": 0}
+    seen = 0
+    address = str(account.get("address", "")).lower()
+    for message_id in ids:
+        incoming = parse_message(backend.fetch_raw(message_id))
+        if incoming.from_address == address:
+            continue
+        result = record_incoming(account["job_seeker_id"], incoming, source="graph_api")
+        seen += 1
+        if result["status"] in outcomes:
+            outcomes[result["status"]] += 1
+
+    repo.save_poll_state(
+        account["id"],
+        {
+            "last_polled_at": utcnow(),
+            "last_error": None,
+            "messages_seen": int(state.get("messages_seen") or 0) + seen,
+        },
+    )
+    return {"account_id": account["id"], "polled": seen, "transport": "graph_api", **outcomes}
 
 
 def _xoauth2_string(address: str, access_token: str) -> str:
