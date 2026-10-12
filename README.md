@@ -133,11 +133,11 @@ than aspirational:
 | employer-kind verdict | `pipeline/employer_resolver.py` | no verdict without evidence |
 | company-domain decision | `pipeline/company_domains.py` | a namesake domain is refused, visibly |
 
-**Scale** (re-derived 2026-10-06; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
-`tests/**/*.py`): 237 Python modules / 123,729 lines ·
-143 JS modules / 44,424 lines · 126 test files / 64,624 lines ·
-**2,146 of 2,206 tests pass offline** · 99 tables · 157 indexes ·
-43 migrations · 35 adapter modules · 24 versioned prompt templates.
+**Scale** (re-derived 2026-10-12; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
+`tests/**/*.py`): 241 Python modules / 126,725 lines ·
+145 JS modules / 44,847 lines · 136 test files / 67,747 lines ·
+**2,318 of 2,342 tests pass offline** · 101 tables · 158 indexes ·
+45 migrations · 35 adapter modules · 24 versioned prompt templates.
 **156 of 157 requirements (99%)** from the specification are cited in the
 source: 103/104 Must, 44/44 Should, 9/9 Could.
 
@@ -164,8 +164,10 @@ pages the home page links to, the site's **sitemap**, **schema.org JSON-LD**
 and **`security.txt`**; it infers the domain's address convention from observed
 addresses; and, for the large corporate sites that answer every fetch with an
 F5/Cloudflare challenge, it can query a **search API** (Brave, Bing or Google
-CSE — set it on the Contacts screen; off until a key is supplied, because the
-engines disallow their HTML search endpoint). A blocked site is recorded as
+CSE — set it on the Contacts screen, *Search provider* tab, administrators
+only; off until a key is supplied, because the engines disallow their HTML
+search endpoint). The stored key is never sent back to the browser. The same
+provider, once switched on, also serves profile enrichment's searches. A blocked site is recorded as
 `blocked`, not reported as having no address.
 
 ### Persistence
@@ -174,7 +176,7 @@ SQLite in WAL mode with a deliberate **one-writer** discipline; repositories are
 the only place SQL is written, and return plain dicts. 90 logical tables across
 43 forward-only migrations: 48 seeker-scoped (they carry `job_seeker_id`),
 39 shared knowledge-base, one migration ledger and two FTS5 search tables. The
-nine FTS5 shadow tables bring `sqlite_master` to the 99 tables counted above.
+nine FTS5 shadow tables bring `sqlite_master` to the 101 tables counted above.
 Plus a `usable_contact` view that encodes the objection rule at the database.
 
 ### Security
@@ -414,8 +416,11 @@ Stated rather than glossed:
 - **Semantic search is built but not consumed** by scoring or the API yet.
 - **Microsoft 365 mail is not implemented**, and the Microsoft 365 calendar
   Graph client cannot be connected because its OAuth exchange is not exposed.
-- **DuckDuckGo search** returns a bot-check page from datacentre ranges, so
-  profile enrichment degrades to declared and handle-derived URLs there.
+- **Without a search provider, profile enrichment searches DuckDuckGo**, which
+  returns a bot-check page from datacentre ranges, so enrichment degrades to
+  declared and handle-derived URLs there. With a provider switched on (Contacts
+  > Search provider), enrichment uses it and falls back to DuckDuckGo only
+  when it fails.
 
 ---
 

@@ -1412,6 +1412,49 @@ def search_results(payload: Any, provider: str) -> list[tuple[str, str]]:
     return out
 
 
+async def provider_query(
+    client: EgressClient,
+    query: str,
+    *,
+    max_results: int = 8,
+    config: dict[str, Any] | None = None,
+) -> list[tuple[str, str]] | None:
+    """One query against the configured search API: ``(url, snippet)`` pairs.
+
+    ``None`` - not an empty list - when the provider could not be asked or did
+    not answer usably, so a caller can tell "no results" from "no search".
+    Shared by the contacts pass and by profile enrichment, which is why the
+    request shape per provider lives here once.
+    """
+    config = config or search_config()
+    provider = config["provider"]
+    endpoint = config["url"] or _SEARCH_ENDPOINTS.get(provider, "")
+    if not (config["enabled"] and provider and endpoint):
+        return None
+    headers = {"Accept": "application/json"}
+    header = _SEARCH_HEADERS.get(provider)
+    if header and config["key"]:
+        headers[header] = config["key"]
+    params: dict[str, Any] = {"q": query, "count": max_results}
+    if provider == "google_cse":
+        params = {"q": query, "num": max_results}
+    try:
+        result = await client.fetch(
+            endpoint, params=params, headers=headers, use_cache=False, access_method="api",
+        )
+    except Exception as exc:  # noqa: BLE001 - a search failure must not abort a pass
+        log.info("Search provider %s failed: %s", provider, exc)
+        return None
+    if not result.ok:
+        log.info("Search provider %s returned %s", provider, result.status_code)
+        return None
+    try:
+        payload = json.loads(result.text)
+    except ValueError:
+        return None
+    return search_results(payload, provider)
+
+
 async def search_for_contacts(
     company_name: str,
     domain: str,
@@ -1435,8 +1478,7 @@ async def search_for_contacts(
             "their HTML search endpoint in robots.txt, so this is an API only (IR-101)."
         )
     provider = config["provider"]
-    endpoint = config["url"] or _SEARCH_ENDPOINTS.get(provider, "")
-    if not endpoint:
+    if not (config["url"] or _SEARCH_ENDPOINTS.get(provider, "")):
         return []
 
     queries = []
@@ -1449,34 +1491,12 @@ async def search_for_contacts(
     if not queries:
         return []
 
-    headers = {"Accept": "application/json"}
-    header = _SEARCH_HEADERS.get(provider)
-    if header and config["key"]:
-        headers[header] = config["key"]
-
     async def _run(client: EgressClient) -> list[FoundAddress]:
         found: dict[str, FoundAddress] = {}
         page_urls: list[str] = []
         for query in queries[:2]:
-            params: dict[str, Any] = {"q": query, "count": max_results}
-            if provider == "google_cse":
-                params = {"q": query, "num": max_results}
-            try:
-                result = await client.fetch(
-                    endpoint, params=params, headers=headers,
-                    use_cache=False, access_method="api",
-                )
-            except Exception as exc:  # noqa: BLE001 - a search failure must not abort a pass
-                log.info("Search provider %s failed: %s", provider, exc)
-                continue
-            if not result.ok:
-                log.info("Search provider %s returned %s", provider, result.status_code)
-                continue
-            try:
-                payload = json.loads(result.text)
-            except ValueError:
-                continue
-            for url, snippet in search_results(payload, provider):
+            pairs = await provider_query(client, query, max_results=max_results, config=config)
+            for url, snippet in pairs or []:
                 for item in extract_addresses(
                     snippet, source_url=url, method=METHOD_SEARCH, domain=domain
                 ):
