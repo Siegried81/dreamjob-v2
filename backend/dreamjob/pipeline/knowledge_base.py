@@ -428,21 +428,53 @@ class KnowledgeBaseWriter:
 
         now = utcnow()
         if existing:
-            merged = _merge(existing, data)
-            # FR-184: a merge enriches the posting we already hold, it does
-            # not re-label it.  A different title is a different opening, so the
-            # surviving row keeps the title it was created with - overwriting it
-            # is what turns a bad match into an invisible one.
-            merged.pop("title", None)
-            merged["collected_at"] = now
-            merged["confidence"] = max(
-                float(existing.get("confidence") or 0), float(confidence or 0)
-            )
-            repo.update_vacancy(existing["id"], merged)
-            return WriteOutcome("vacancy", existing["id"], created=False, matched_on=matched_on)
+            return self._merge_vacancy(existing, data, confidence, matched_on, now)
         data["collected_at"] = now
         data.setdefault("confidence", confidence)
-        return WriteOutcome("vacancy", repo.insert_vacancy(data), created=True)
+        try:
+            return WriteOutcome("vacancy", repo.insert_vacancy(data), created=True)
+        except sqlite3.IntegrityError:
+            # The lookup above and this insert are two transactions: another
+            # writer inserted the same key in between, and the unique index on
+            # ``dedup_key`` (migration 160) refused a second row.  The posting
+            # is the one that writer stored, so merge into it.
+            existing = repo.vacancy_by_dedup_key(data["dedup_key"])
+            if existing is None:
+                raise
+            return self._merge_vacancy(existing, data, confidence, "dedup_key", now)
+
+    def _merge_vacancy(
+        self,
+        existing: dict,
+        data: dict,
+        confidence: float,
+        matched_on: str | None,
+        now: str,
+    ) -> WriteOutcome:
+        """Merge ``data`` into the vacancy row it was matched to.
+
+        A fuzzy match carries the incoming ``dedup_key`` onto the row.  If
+        another row took that key in the meantime the unique index refuses the
+        update, and the row keeps its own key rather than losing the merge.
+        """
+        merged = _merge(existing, data)
+        # FR-184: a merge enriches the posting we already hold, it does
+        # not re-label it.  A different title is a different opening, so the
+        # surviving row keeps the title it was created with - overwriting it
+        # is what turns a bad match into an invisible one.
+        merged.pop("title", None)
+        merged["collected_at"] = now
+        merged["confidence"] = max(
+            float(existing.get("confidence") or 0), float(confidence or 0)
+        )
+        try:
+            repo.update_vacancy(existing["id"], merged)
+        except sqlite3.IntegrityError:
+            if "dedup_key" not in merged:
+                raise
+            merged.pop("dedup_key")
+            repo.update_vacancy(existing["id"], merged)
+        return WriteOutcome("vacancy", existing["id"], created=False, matched_on=matched_on)
 
     def _company_for_vacancy(self, data: dict, raw_document_id: str | None) -> str | None:
         """The knowledge-base company this posting belongs to, creating it if new.
