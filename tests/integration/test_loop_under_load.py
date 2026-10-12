@@ -766,8 +766,16 @@ def test_a_campaign_resumes_across_a_restart_without_losing_or_repeating_work(
     # SIGKILL: the task vanishes, nothing is told, the row still says 'running'.
     control = runner._controls[job_id]
     assert control.task is not None
-    control.task.get_loop().call_soon_threadsafe(control.task.cancel)
-    time.sleep(0.2)
+    job_loop = control.task.get_loop()
+    job_loop.call_soon_threadsafe(control.task.cancel)
+    # A SIGKILL leaves nothing running, so the restart below may only begin
+    # once the killed worker has really stopped.  The cancel lands at the
+    # worker's next await, which can be a whole write batch away on a loaded
+    # runner; a fixed sleep let the old worker keep writing beside the resumed
+    # one, and the writer's lookup-then-insert, raced from two threads, stored
+    # the same postings twice.
+    stopped = until(lambda: control.task.done() and job_loop.is_closed(), timeout=60)
+    assert stopped < 60, "the killed worker was still running a minute after the kill"
     runner._controls.pop(job_id, None)
     assert job_row(campaign)["status"] == "running", (
         "a job killed with the process must look interrupted, not finished"
