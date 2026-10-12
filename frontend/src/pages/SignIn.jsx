@@ -3,12 +3,14 @@
  *
  * Passwords plus TOTP. The server decides whether MFA is required and answers
  * a first-factor success with `mfa_required`, so this screen never has to know
- * in advance which accounts have MFA enrolled.
+ * in advance which accounts have MFA enrolled. A passkey is the other branch:
+ * the device's own verification replaces both the password and the code.
  */
 
 import { useState } from 'react'
 
 import { api } from '../api/client'
+import { passkeysSupported, signInWithPasskey } from '../api/passkeys'
 
 export default function SignIn({ onSignedIn }) {
   const [mode, setMode] = useState('signin')
@@ -45,6 +47,18 @@ export default function SignIn({ onSignedIn }) {
       onSignedIn(await api.get('/auth/me'))
     } catch (err) {
       setError(err.message)
+      setBusy(false)
+    }
+  }
+
+  async function passkey() {
+    setError(null)
+    setBusy(true)
+    try {
+      await signInWithPasskey(email)
+      onSignedIn(await api.get('/auth/me'))
+    } catch (err) {
+      setError(err.status === 401 ? 'That passkey was not accepted.' : err.message)
       setBusy(false)
     }
   }
@@ -137,6 +151,17 @@ export default function SignIn({ onSignedIn }) {
             {busy ? <span className="spinner" /> : mode === 'register' ? 'Create account' : 'Sign in'}
           </button>
         </form>
+
+        {mode === 'signin' && passkeysSupported() && (
+          <button
+            className="btn btn-lg"
+            style={{ width: '100%', marginTop: 10 }}
+            disabled={busy}
+            onClick={passkey}
+          >
+            Sign in with a passkey
+          </button>
+        )}
 
         <div style={{ marginTop: 14, textAlign: 'center' }}>
           <button

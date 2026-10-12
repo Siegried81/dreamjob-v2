@@ -36,6 +36,12 @@ class Settings(BaseSettings):
 
     master_key: str = Field("", alias="DREAMJOB_MASTER_KEY")
     session_secret: str = Field("", alias="DREAMJOB_SESSION_SECRET")
+    # Passkeys (NFR-202, security.passkeys).  WebAuthn refuses an IP address
+    # as the relying-party id, so the app is opened on ``localhost``.
+    webauthn_rp_id: str = Field("localhost", alias="DREAMJOB_WEBAUTHN_RP_ID")
+    webauthn_origins: str = Field(
+        "http://localhost:5173,http://localhost:8000", alias="DREAMJOB_WEBAUTHN_ORIGINS"
+    )
 
     # --- LLM (CR-409) ------------------------------------------------------
     llm_provider: str = Field("deepseek", alias="DREAMJOB_LLM_PROVIDER")

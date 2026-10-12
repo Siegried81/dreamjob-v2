@@ -30,6 +30,9 @@ playwright>=1.63.0
 cryptography>=50.0.2
 argon2-cffi>=25.1.0
 pyotp>=2.10.0
+# Passkeys (NFR-202): py_webauthn verifies attestations and assertions.
+# 3.x is the API security/passkeys.py is written against.
+webauthn>=3.0.1,<4
 
 # --- Email -----------------------------------------------------------------
 dnspython>=2.8.0

@@ -25,6 +25,7 @@ never picked up: FR-108 keeps the market data that the campaigns produced.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from typing import Any
 
@@ -332,6 +333,31 @@ def set_password_hash(seeker_id: str, password_hash: str) -> None:
 def set_totp_blob(seeker_id: str, blob: bytes | None) -> None:
     """Store (or clear) the encrypted TOTP envelope (NFR-201, NFR-202)."""
     update_seeker(seeker_id, {"totp_secret_enc": blob})
+
+
+def set_webauthn_credentials(seeker_id: str, credentials: list[dict[str, Any]]) -> None:
+    """Store the job seeker's passkeys (NFR-202); public keys only, nothing secret."""
+    update_seeker(seeker_id, {"webauthn_credentials": json.dumps(credentials) if credentials else None})
+
+
+def seeker_by_credential_id(credential_id: str) -> dict | None:
+    """The job seeker who registered this passkey, or ``None``.
+
+    The ids live in a JSON column, so the ``LIKE`` only narrows the scan and the
+    parsed list decides: a substring of another id is never a match.
+    """
+    rows = query_all(
+        "SELECT * FROM job_seeker WHERE webauthn_credentials LIKE ?",
+        (f"%{credential_id}%",),
+    )
+    for row in rows:
+        try:
+            stored = json.loads(row["webauthn_credentials"] or "[]")
+        except ValueError:
+            continue
+        if any(c.get("id") == credential_id for c in stored if isinstance(c, dict)):
+            return row
+    return None
 
 
 def set_admin(seeker_id: str, is_admin: bool) -> None:

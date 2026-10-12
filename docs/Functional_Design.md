@@ -897,9 +897,13 @@ the responsive layout in the stylesheets that the matrix scans.
 
 Carried forward honestly rather than closed:
 
-- **Passkeys (NFR-202)** are not implemented; the requirement's "strong
-  passwords with MFA" branch is. MFA is opt-in per account, and a placeholder
-  WebAuthn column exists in the schema but no code path uses it.
+- **Passkeys (NFR-202)** sit beside the password + MFA branch: a signed-in job
+  seeker registers one (Profile > Privacy), and can then sign in with it alone,
+  user verification required (`security/passkeys.py`, py_webauthn). They need
+  the app opened on `localhost` (WebAuthn refuses an IP address) unless
+  `DREAMJOB_WEBAUTHN_RP_ID` / `DREAMJOB_WEBAUTHN_ORIGINS` name another host;
+  attestation is not verified (`none`); MFA remains opt-in for password
+  sign-in.
 - **Database-level encryption (NFR-201)** is partial. Credentials, secrets, the
   sealed profile sections and package generation notes are encrypted with
   per-job-seeker keys; the SQLite file itself relies on disk-level encryption.

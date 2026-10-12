@@ -133,11 +133,11 @@ than aspirational:
 | employer-kind verdict | `pipeline/employer_resolver.py` | no verdict without evidence |
 | company-domain decision | `pipeline/company_domains.py` | a namesake domain is refused, visibly |
 
-**Scale** (re-derived 2026-10-06; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
-`tests/**/*.py`): 237 Python modules / 123,729 lines ·
-143 JS modules / 44,424 lines · 126 test files / 64,624 lines ·
-**2,146 of 2,206 tests pass offline** · 99 tables · 157 indexes ·
-43 migrations · 35 adapter modules · 24 versioned prompt templates.
+**Scale** (re-derived 2026-10-12; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
+`tests/**/*.py`): 242 Python modules / 127,090 lines ·
+146 JS modules / 44,926 lines · 136 test files / 67,896 lines ·
+**2,325 of 2,349 tests pass offline** · 101 tables · 158 indexes ·
+45 migrations · 35 adapter modules · 24 versioned prompt templates.
 **156 of 157 requirements (99%)** from the specification are cited in the
 source: 103/104 Must, 44/44 Should, 9/9 Could.
 
@@ -174,12 +174,12 @@ SQLite in WAL mode with a deliberate **one-writer** discipline; repositories are
 the only place SQL is written, and return plain dicts. 90 logical tables across
 43 forward-only migrations: 48 seeker-scoped (they carry `job_seeker_id`),
 39 shared knowledge-base, one migration ledger and two FTS5 search tables. The
-nine FTS5 shadow tables bring `sqlite_master` to the 99 tables counted above.
+nine FTS5 shadow tables bring `sqlite_master` to the 101 tables counted above.
 Plus a `usable_contact` view that encodes the objection rule at the database.
 
 ### Security
 
-Argon2id passwords, optional TOTP MFA, client-bound HMAC sessions, AES-256-GCM
+Argon2id passwords, optional TOTP MFA, WebAuthn passkeys, client-bound HMAC sessions, AES-256-GCM
 field encryption with per-seeker HKDF keys, append-only audit trail, and consent
 records for the LLM transfer (CR-410) and LinkedIn automation (CR-401).
 Credentials, secrets and the sealed profile sections are encrypted; the SQLite
@@ -401,8 +401,12 @@ routed to a local model instead. See [DPIA.md](docs/DPIA.md).
 
 Stated rather than glossed:
 
-- **Passkeys (NFR-202)** are not implemented; the password + MFA branch is. A
-  `webauthn_credentials` column exists but no code path uses it.
+- **Passkeys (NFR-202) work on `localhost` only by default.** WebAuthn refuses
+  an IP address as relying-party id, so the app must be opened at
+  `http://localhost:...` (set `DREAMJOB_WEBAUTHN_RP_ID` and
+  `DREAMJOB_WEBAUTHN_ORIGINS` for any other host name). Attestation is not
+  checked (`none`), which is the norm for consumer passkeys, and a pending
+  passkey ceremony does not survive an API restart.
 - **The SQLite file is not encrypted.** Credentials, secrets and sealed profile
   sections are field-encrypted; whole-database confidentiality rests on disk
   encryption. SQLCipher would add a dependency.
