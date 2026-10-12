@@ -181,9 +181,11 @@ llm.complete_json(
   redaction sweep.
 - **Embeddings (FR-341).** `llm.embed()` writes one content-hash-keyed vector per
   entity into `embedding`, skipping unchanged content; nearest-neighbour search
-  is pure-Python cosine, so the feature needs no vector database. It is built and
-  backfilled by `scripts/build_semantic_index.py` but not yet consulted by
-  scoring or the API.
+  is pure-Python cosine, so the feature needs no vector database. It is
+  backfilled by `scripts/build_semantic_index.py`, read by
+  `GET /api/opportunities/semantic` (restricted to the seeker's own
+  opportunities through `opportunities.vacancy_links`), and by scoring only
+  when `DREAMJOB_SEMANTIC_SCORING` is on (`scoring.embedding_relevance`).
 
 Prompts are versioned `.md` templates with a metadata header (NFR-602); the
 version travels into `llm_call.prompt_version`, so a regression in generated
@@ -447,7 +449,7 @@ normalised, and the dream-job model generated through the live DeepSeek API.
 | A calendar provider | Implement the client and wire the OAuth exchange | One file |
 | A language | Add to the prompt templates and `help/content.js` | Content only |
 | A local model | Set `DREAMJOB_LOCAL_LLM_*` and list the task groups | Configuration |
-| Semantic search | Set `DREAMJOB_EMBEDDINGS_*` and run `scripts/build_semantic_index.py` | Config + script |
+| Semantic search | Set `DREAMJOB_EMBEDDINGS_*` and run `scripts/build_semantic_index.py`; `DREAMJOB_SEMANTIC_SCORING=true` to let it score | Config + script |
 | A scheduler task | Add a `Task` with an interval to `DEFAULT_TASKS` | `monitoring/scheduler.py` |
 | A bulk employer import | An operator script against the shared knowledge base | One script |
 | An account lifecycle action | Add to `auth_service` behind `current_admin` | Service + router |

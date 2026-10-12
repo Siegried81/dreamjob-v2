@@ -131,6 +131,29 @@ def get_by_ids(opportunity_ids: list[str], job_seeker_id: str) -> list[dict]:
     return [by_id[i] for i in opportunity_ids if i in by_id]
 
 
+def vacancy_links(job_seeker_id: str, campaign_id: str | None = None) -> dict[str, list[str]]:
+    """This seeker's opportunities by the vacancy they came from.
+
+    The semantic index is keyed by vacancy, which is shared corpus; the
+    opportunity is what belongs to the seeker.  Reading the mapping from the
+    seeker's own rows is what keeps a semantic query from ever reaching a
+    vacancy they were not shown.  Speculative openings have no vacancy and are
+    not in it.
+    """
+    sql = (
+        "SELECT id, vacancy_id FROM opportunity "
+        "WHERE job_seeker_id = ? AND vacancy_id IS NOT NULL"
+    )
+    params: list[Any] = [job_seeker_id]
+    if campaign_id:
+        sql += " AND campaign_id = ?"
+        params.append(campaign_id)
+    out: dict[str, list[str]] = {}
+    for row in query_all(sql, tuple(params)):
+        out.setdefault(str(row["vacancy_id"]), []).append(str(row["id"]))
+    return out
+
+
 def owned_ids(job_seeker_id: str, opportunity_ids: list[str]) -> set[str]:
     """The subset of these ids that belong to this seeker (FR-101, FR-344).
 

@@ -265,6 +265,12 @@ DREAMJOB_EMBEDDINGS_BASE_URL=...
 python3 scripts/build_semantic_index.py
 ```
 
+Once the index is built, `GET /api/opportunities/semantic?q=...` ranks the
+seeker's own opportunities by meaning. Scoring ignores the index unless
+`DREAMJOB_SEMANTIC_SCORING=true`, which adds the vacancy's similarity to the
+dream job as a fifth of the mechanical dream-fit sub-score (scores computed
+with and without it are not comparable).
+
 **Near-real-time vacancies** — on by default. The scheduler's `vacancy_refresh`
 task runs every 10 minutes (`DREAMJOB_VACANCY_REFRESH_SECONDS`): it re-reads a
 bounded, round-robin slice of the ATS boards behind existing ranked lists, and
@@ -416,7 +422,9 @@ Stated rather than glossed:
   or job board. Opportunity rows scored before a company was tagged keep their
   old company sub-score until they are re-scored; there is no automatic
   backfill.
-- **Semantic search is built but not consumed** by scoring or the API yet.
+- **Semantic scoring is off by default** and uncalibrated: the raw cosine of
+  the chosen embeddings model is used as is. The search endpoint is live once
+  the index is built; the interface does not call it yet.
 - **Microsoft 365 mail is not implemented**, and the Microsoft 365 calendar
   Graph client cannot be connected because its OAuth exchange is not exposed.
 - **Without a search provider, profile enrichment searches DuckDuckGo**, which

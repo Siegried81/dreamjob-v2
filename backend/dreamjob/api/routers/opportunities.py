@@ -32,6 +32,7 @@ from dreamjob.jobs.runner import JobContext, runner
 from dreamjob.pipeline import compensation as comp_mod
 from dreamjob.pipeline import employer_product, locate, scoring, speculative
 from dreamjob.pipeline import opportunities as synth
+from dreamjob.pipeline import semantic as semantic_mod
 from dreamjob.security.audit import record_audit
 
 router = APIRouter()
@@ -311,6 +312,54 @@ def list_opportunities(
     if radius_km is not None:
         out["location_coverage"] = locate.coverage(seeker.id)
     return out
+
+
+@router.get("/semantic")
+def semantic_search(
+    seeker: Seeker,
+    q: Annotated[str, Query(min_length=1, max_length=500)],
+    campaign_id: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> dict:
+    """The seeker's opportunities whose vacancy reads most like ``q`` (FR-261).
+
+    Ranked by cosine similarity over the semantic index, which
+    ``scripts/build_semantic_index.py`` fills when ``DREAMJOB_EMBEDDINGS_MODEL``
+    is set.  Only this seeker's own opportunities are candidates.  Without a
+    model, or with an empty index, the answer is an empty list that says why -
+    never an error, because keyword search (``GET ?q=``) still works.
+
+    ``similarity`` is a cosine between -1 and 1; it orders the rows and is not
+    a score: it is never written to the opportunity and does not change the
+    ranked list.
+    """
+    links = repo.vacancy_links(seeker.id, campaign_id)
+    model_on = semantic_mod.available()
+    sims = semantic_mod.similarities(q, list(links)) if model_on and links else {}
+    ranked = sorted(
+        ((sim, opp_id) for vacancy_id, sim in sims.items() for opp_id in links[vacancy_id]),
+        key=lambda pair: (-pair[0], pair[1]),
+    )[:limit]
+    by_id = {r["id"]: r for r in repo.get_by_ids([o for _, o in ranked], seeker.id)}
+    items = [
+        {**_present(by_id[opp_id], seeker.locale), "similarity": sim}
+        for sim, opp_id in ranked
+        if opp_id in by_id
+    ]
+    if not model_on:
+        note = "No embeddings model is configured (DREAMJOB_EMBEDDINGS_MODEL)."
+    elif links and not sims:
+        note = "None of these vacancies is in the semantic index yet; build it first."
+    else:
+        note = None
+    return {
+        "available": model_on,
+        "items": items,
+        "candidates": sum(len(v) for v in links.values()),
+        "indexed": sum(len(links[v]) for v in sims),
+        "note": note,
+        "advisory": scoring.ADVISORY_NOTE,
+    }
 
 
 # ---------------------------------------------------------------------------

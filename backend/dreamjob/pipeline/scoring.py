@@ -70,6 +70,7 @@ from dreamjob.llm.client import BudgetExhausted, LLMClient, LLMError, redact
 from dreamjob.pipeline import compensation as comp_mod
 from dreamjob.pipeline import directives as dir_mod
 from dreamjob.pipeline import employer_product as emp_mod
+from dreamjob.pipeline import semantic as semantic_mod
 from dreamjob.pipeline.enrichment import load_prompt
 from dreamjob.pipeline.geocode import haversine_km
 from dreamjob.pipeline.opportunities import KIND_SPECULATIVE
@@ -353,6 +354,9 @@ class ScoringContext:
     _reachability: dict[str, dict] = field(default_factory=dict)
     _employer_tags: dict[str, emp_mod.EmployerTag] = field(default_factory=dict)
     _advisory: dict[str, Any] | None = None
+    #: ``False`` until read; then the dream-job vector, or ``None`` when the
+    #: semantic term is off or unavailable for this run.
+    _dream_vector: list[float] | None | bool = False
 
     @property
     def advisory(self) -> dict[str, Any]:
@@ -390,6 +394,13 @@ class ScoringContext:
                 for label in self.skill_terms
             }
         return self._term_weights
+
+    @property
+    def dream_vector(self) -> list[float] | None:
+        """The dream job, embedded once per run, or ``None`` (see :func:`embedding_relevance`)."""
+        if self._dream_vector is False:
+            self._dream_vector = _embed_dream(self)
+        return self._dream_vector  # type: ignore[return-value]
 
     def company(self, company_id: str | None) -> dict | None:
         if not company_id:
@@ -2015,15 +2026,23 @@ def score_opportunity(
     criteria = dream_criteria(opportunity, ctx, tag=tag)
     criteria_value = score_criteria(criteria)
     title_value, title_note = title_relevance(opportunity, ctx)
+    # ``None`` unless DREAMJOB_SEMANTIC_SCORING is on, and then ``_weighted``
+    # drops it, so the default arithmetic is exactly the two-part one.
+    embedding_value = embedding_relevance(opportunity, ctx)
     # The title is the one thing every posting states and the clearest signal
     # of what the job is; the criteria meter says how the rest lines up.
-    deterministic_dream = _weighted([(0.5, title_value), (0.5, criteria_value)])
-    subscores["dream_fit"] = SubScore(
-        deterministic_dream,
-        [title_note, "dream-job criteria assessed mechanically"],
-        {"criteria": len(criteria), "title_relevance": title_value,
-         "criteria_score": criteria_value},
+    deterministic_dream = _weighted(
+        [(0.5, title_value), (0.5, criteria_value), (SEMANTIC_DREAM_WEIGHT, embedding_value)]
     )
+    dream_detail: dict[str, Any] = {
+        "criteria": len(criteria), "title_relevance": title_value,
+        "criteria_score": criteria_value,
+    }
+    dream_notes = [title_note, "dream-job criteria assessed mechanically"]
+    if embedding_value is not None:
+        dream_detail["embedding_similarity"] = embedding_value
+        dream_notes.append("semantic-index similarity to the dream job included")
+    subscores["dream_fit"] = SubScore(deterministic_dream, dream_notes, dream_detail)
 
     rationale: str | None = None
     meter_method = "deterministic"
@@ -2116,6 +2135,80 @@ def score_opportunity(
             None if sub.value is None else round(sub.value * 100, 1)
         )
     return columns
+
+
+#: Weight of the semantic-index term beside title (0.5) and criteria (0.5) in
+#: the deterministic dream fit, i.e. a fifth of it when present.  Only used
+#: when ``DREAMJOB_SEMANTIC_SCORING`` is on.
+SEMANTIC_DREAM_WEIGHT = 0.25
+
+
+def embedding_relevance(opportunity: dict, ctx: ScoringContext) -> float | None:
+    """Cosine of the vacancy's stored vector to the dream job, clamped to 0..1.
+
+    Off unless ``DREAMJOB_SEMANTIC_SCORING`` is set, so no score changes by
+    default.  When on, the vacancy vector is read from the index (never
+    computed here: one embedding call per row would cost what the index exists
+    to avoid), and a vacancy that is not indexed contributes nothing rather
+    than zero.  The raw cosine is used, not calibrated per model; a negative
+    cosine counts as no similarity.
+    """
+    vector = ctx.dream_vector
+    vacancy_id = (opportunity or {}).get("vacancy_id")
+    if vector is None or not vacancy_id:
+        return None
+    model = (get_settings().embeddings_model or "").strip()
+    stored = semantic_mod.stored_vector("vacancy", str(vacancy_id), model)
+    if stored is None:
+        return None
+    return _clamp(semantic_mod.cosine(vector, stored))
+
+
+def _embed_dream(ctx: ScoringContext) -> list[float] | None:
+    """Embed the dream job for :func:`embedding_relevance`, or ``None``.
+
+    The dream job is profile data leaving the machine, so the same rules as the
+    model call apply: the seeker's ``llm_transfer`` consent (CR-410) and the
+    do-not-disclose redaction (FR-106).  Any failure leaves the term out.
+    """
+    settings = get_settings()
+    if not settings.semantic_scoring or not (settings.embeddings_model or "").strip():
+        return None
+    if not campaign_repo.has_consent(ctx.job_seeker_id, "llm_transfer"):
+        return None
+    dream = redact(
+        {
+            "statement": ctx.dream.get("statement"),
+            "target_roles": ctx.dream.get("target_roles"),
+            "responsibilities": ctx.dream.get("responsibilities"),
+        },
+        ctx.do_not_disclose,
+    )
+    text = _dream_text(dream)
+    if not text:
+        return None
+    try:
+        client = LLMClient(campaign_id=ctx.campaign_id, job_seeker_id=ctx.job_seeker_id)
+        return client.embed([text])[0] or None
+    except Exception:  # noqa: BLE001 - the term is optional, scoring is not
+        log.warning("Dream-job embedding unavailable; semantic term left out", exc_info=True)
+        return None
+
+
+def _dream_text(node: Any) -> str:
+    """Flatten the redacted dream-job fields into one embeddable text."""
+    if node is None:
+        return ""
+    if isinstance(node, str):
+        return node.strip()
+    if isinstance(node, dict):
+        preferred = node.get("title") or node.get("text")
+        if isinstance(preferred, str):
+            return preferred.strip()
+        return " ".join(t for t in (_dream_text(v) for v in node.values()) if t)
+    if isinstance(node, list | tuple):
+        return " ".join(t for t in (_dream_text(v) for v in node) if t)
+    return ""
 
 
 #: Components that describe the employer or the package rather than the job.

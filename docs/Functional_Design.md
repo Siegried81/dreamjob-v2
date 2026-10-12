@@ -506,8 +506,19 @@ Feedback re-tunes that job seeker's weights and suggests directive refinements
 
 A **semantic index** (FR-341) stores one content-hash-keyed embedding per
 company and vacancy and can answer nearest-neighbour queries with pure-Python
-cosine; it is built and maintained, but neither scoring nor search consults it
-yet, so it is listed among the known limitations rather than claimed as live.
+cosine. `GET /api/opportunities/semantic?q=` ranks the job seeker's own
+opportunities by similarity of their vacancy to the query - another seeker's
+rows are never candidates, and without a model the answer is an empty list that
+says why. Scoring consults the index only when `DREAMJOB_SEMANTIC_SCORING` is
+on: the vacancy's similarity to the dream job (statement, target roles and
+responsibilities, redacted and sent only with the seeker's LLM-transfer
+consent) then weighs 0.25 beside title (0.5) and criteria (0.5) in the
+mechanical dream fit. A vacancy that is not indexed contributes nothing rather
+than zero.
+
+> **Decision.** Off by default, because it changes what a score means and the
+> raw cosine is not calibrated across embeddings models. With it off, the
+> embedder is never called and every score is unchanged.
 
 ### 7.6 Employer kind — agencies, boards and undisclosed employers
 
@@ -919,8 +930,10 @@ Carried forward honestly rather than closed:
   company was tagged keep the old company sub-score until re-scored, and the
   apply e-mail still frames an agency as the employer. Recorded in
   `Employer_Kind_Results.md` §7.
-- **Semantic search is built but not consumed.** The embedding table, backfill
-  script and cosine query exist; nothing in scoring or the API reads them yet.
+- **Semantic search has no screen, and semantic scoring is opt-in.** The API
+  answers `GET /api/opportunities/semantic`; the interface does not call it
+  yet. `DREAMJOB_SEMANTIC_SCORING` is off by default and uses the model's raw,
+  uncalibrated cosine.
 - **Microsoft 365 mail** is not implemented, and the Microsoft 365 **calendar
   Graph client is implemented but not connectable** because its OAuth exchange
   is not exposed. Gmail and Google Calendar are wired end to end.

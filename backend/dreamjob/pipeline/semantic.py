@@ -199,6 +199,73 @@ def search(
     ]
 
 
+def similarities(
+    query: str,
+    entity_ids: list[str],
+    *,
+    llm: LLMClient | None = None,
+    entity_type: str = "vacancy",
+) -> dict[str, float]:
+    """Cosine similarity of ``query`` to each of ``entity_ids`` that has a vector.
+
+    The restricted form of :func:`search`: the caller names the candidates, so
+    a job seeker's query is only ever compared with rows they may see, rather
+    than ranked across the whole shared corpus and filtered afterwards.  An id
+    with no stored vector is absent from the result, never scored zero.  Inert
+    (an empty dict) without a model, and on any embedding failure.
+    """
+    wanted = {str(i) for i in entity_ids if i}
+    if not query.strip() or not wanted:
+        return {}
+    client = llm or LLMClient()
+    model = (client.settings.embeddings_model or "").strip()
+    if not model:
+        return {}
+    try:
+        query_vector = client.embed([query])[0]
+    except Exception:  # noqa: BLE001 - search is an enhancement, never a failure
+        log.warning("Semantic search unavailable", exc_info=True)
+        return {}
+    return {
+        entity_id: round(cosine(query_vector, vector), 4)
+        for entity_id, vector in _vectors_for(entity_type, model, sorted(wanted))
+    }
+
+
+def _vectors_for(
+    entity_type: str, model: str, entity_ids: list[str]
+) -> list[tuple[str, list[float]]]:
+    """Stored vectors for the named entities only, read in bounded chunks.
+
+    Reading every vector of a type (as :func:`search` must) would parse the
+    whole corpus to rank one seeker's few hundred rows; 500 ids per statement
+    stays under SQLite's parameter limit on old builds.
+    """
+    out: list[tuple[str, list[float]]] = []
+    for start in range(0, len(entity_ids), 500):
+        chunk = entity_ids[start : start + 500]
+        marks = ", ".join("?" for _ in chunk)
+        rows = query_all(
+            "SELECT entity_id, vector FROM embedding "
+            f"WHERE entity_type = ? AND model = ? AND entity_id IN ({marks})",
+            (entity_type, model, *chunk),
+        )
+        for row in rows:
+            try:
+                vector = json.loads(row["vector"])
+            except (TypeError, ValueError):
+                continue
+            if isinstance(vector, list) and vector:
+                out.append((row["entity_id"], vector))
+    return out
+
+
+def stored_vector(entity_type: str, entity_id: str, model: str) -> list[float] | None:
+    """One entity's stored vector for ``model``, or ``None`` when it has none."""
+    found = _vectors_for(entity_type, model, [entity_id])
+    return found[0][1] if found else None
+
+
 def available(llm: LLMClient | None = None) -> bool:
     client = llm or LLMClient()
     return bool((client.settings.embeddings_model or "").strip())

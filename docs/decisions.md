@@ -140,3 +140,24 @@ pitched a speculative opening and have its accounts collected.
 **What would reverse it.** Dropping the call in one of the four passes; the
 helper fails open (an unreadable verdict table skips nothing).
 
+## 2026-10-12 — the semantic index may enter the dream fit, off by default
+
+**What.** `DREAMJOB_SEMANTIC_SCORING` (default `false`). When on, and an
+embeddings model is configured, the mechanical dream-fit sub-score becomes
+`(0.5 x title + 0.5 x criteria + 0.25 x similarity) / 1.25` instead of
+`(0.5 x title + 0.5 x criteria) / 1.0`, where similarity is the cosine between
+the vacancy's stored vector and the embedded dream job, clamped to 0..1. A
+vacancy with no stored vector keeps the two-part formula.
+
+**Why off.** It changes what a score means, and a raw cosine is not on the
+same scale across embeddings models. With the setting off, `_weighted` drops
+the missing term, the arithmetic is the two-part one exactly, and the embedder
+is never called - so no existing score changes.
+
+**Why a fifth.** The term measures topical closeness of whole texts, which the
+title and criteria terms already approximate; it is meant to break ties among
+adverts the mechanical terms rate alike, not to outvote them.
+
+**What would reverse it.** A per-model calibration of the cosine, after which
+the term could be on by default - with a re-score, since scores before and
+after would not be comparable.

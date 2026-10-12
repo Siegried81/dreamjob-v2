@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     # no semantic index: the feature is inert rather than broken.
     embeddings_model: str = Field("", alias="DREAMJOB_EMBEDDINGS_MODEL")
     embeddings_base_url: str = Field("", alias="DREAMJOB_EMBEDDINGS_BASE_URL")
+    # Lets the semantic index contribute to the deterministic dream-fit
+    # sub-score (pipeline.scoring.embedding_relevance).  Off by default: turning
+    # it on changes what a score means, so it is an explicit operator choice.
+    semantic_scoring: bool = Field(False, alias="DREAMJOB_SEMANTIC_SCORING")
 
     default_token_budget: int = Field(2_000_000, alias="DREAMJOB_DEFAULT_TOKEN_BUDGET")
     # How many opportunities of a campaign earn an LLM scoring call (NFR-104;
