@@ -239,6 +239,7 @@ one-writer invariant.
 | Data at rest (NFR-201) | AES-256-GCM, keys derived per job seeker by HKDF from one master key. Credentials, secrets, TOTP material, sealed profile sections and package generation notes are field-encrypted. Deleting a job seeker makes their ciphertext unreadable even if a copy survives. |
 | Passwords (NFR-202) | Argon2id (PBKDF2-SHA256 fallback), with a policy requiring three of four character classes |
 | MFA (NFR-202) | TOTP, secret stored encrypted, fail-closed if the envelope cannot be decrypted |
+| Passkeys (NFR-202) | WebAuthn via py_webauthn, user verification required, `none` attestation; public keys and sign counters in `job_seeker.webauthn_credentials`; challenges single-use, in memory, five minutes |
 | Sessions (NFR-202) | Random token; only the HMAC is stored; bound to a UA+IP fingerprint and re-checked per request; revoked on password change, admin reset and suspension |
 | Accounts (FR-108) | First account is admin; create/suspend/reset/delete, with a last-active-administrator guard and a self-guard |
 | Third-party credentials (NFR-203) | **Never stored.** Browser automation attaches to a session the user owns |
@@ -248,9 +249,9 @@ one-writer invariant.
 | Objections (NFR-302) | Enforced in a `usable_contact` view, not only in the interface |
 | Audit (NFR-702) | Append-only trail of who approved and sent what, with the versions used |
 
-**Known gaps**, stated rather than glossed: passkeys are not implemented (the
-password+MFA branch is); a `webauthn_credentials` column exists in the initial
-schema but no code path reads or writes it. The SQLite file itself is not
+**Known gaps**, stated rather than glossed: passkeys work on `localhost`
+unless the relying party is configured for another host, and their
+attestation is not verified. The SQLite file itself is not
 encrypted, so whole-database confidentiality rests on disk encryption —
 SQLCipher would add a dependency.
 

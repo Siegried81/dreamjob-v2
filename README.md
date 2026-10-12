@@ -181,7 +181,7 @@ Plus a `usable_contact` view that encodes the objection rule at the database.
 
 ### Security
 
-Argon2id passwords, optional TOTP MFA, client-bound HMAC sessions, AES-256-GCM
+Argon2id passwords, optional TOTP MFA, WebAuthn passkeys, client-bound HMAC sessions, AES-256-GCM
 field encryption with per-seeker HKDF keys, append-only audit trail, and consent
 records for the LLM transfer (CR-410) and LinkedIn automation (CR-401).
 Credentials, secrets and the sealed profile sections are encrypted; the SQLite
@@ -414,8 +414,12 @@ routed to a local model instead. See [DPIA.md](docs/DPIA.md).
 
 Stated rather than glossed:
 
-- **Passkeys (NFR-202)** are not implemented; the password + MFA branch is. A
-  `webauthn_credentials` column exists but no code path uses it.
+- **Passkeys (NFR-202) work on `localhost` only by default.** WebAuthn refuses
+  an IP address as relying-party id, so the app must be opened at
+  `http://localhost:...` (set `DREAMJOB_WEBAUTHN_RP_ID` and
+  `DREAMJOB_WEBAUTHN_ORIGINS` for any other host name). Attestation is not
+  checked (`none`), which is the norm for consumer passkeys, and a pending
+  passkey ceremony does not survive an API restart.
 - **The SQLite file is not encrypted.** Credentials, secrets and sealed profile
   sections are field-encrypted; whole-database confidentiality rests on disk
   encryption. SQLCipher would add a dependency.
