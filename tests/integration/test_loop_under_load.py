@@ -797,8 +797,10 @@ def test_a_campaign_resumes_across_a_restart_without_losing_or_repeating_work(
     row = job_row(campaign)
     assert row["status"] == "done", f"the resumed job did not finish: {row.get('last_error')}"
 
-    # Nothing lost: the campaign collected everything it was planned for.
-    assert vacancy_count() > collected_before
+    # Nothing lost: the campaign collected everything it was planned for.  Not
+    # "more than before the kill": the test waits for the killed worker to stop,
+    # and on a fast runner it can finish every page before the cancel lands.
+    assert vacancy_count() >= collected_before
     assert vacancy_count() == EXPECTED_VACANCIES, (
         f"the resumed campaign ended with {vacancy_count()} vacancies of {EXPECTED_VACANCIES}; "
         "work was lost across the restart (NFR-401)"
