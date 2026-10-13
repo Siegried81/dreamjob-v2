@@ -72,6 +72,7 @@ from dreamjob.db.connection import (
     upsert_row,
     utcnow,
 )
+from dreamjob.security.network import is_public_address, resolve_host
 
 log = logging.getLogger(__name__)
 
@@ -115,6 +116,21 @@ class RobotsUnavailable(RobotsDisallowed):
 
 class RateLimited(RuntimeError):
     """Raised after repeated 429/503 responses from a domain."""
+
+
+class BlockedTarget(RuntimeError):
+    """The URL (or a redirect hop) points somewhere the server must not reach.
+
+    SSRF guard: a job board, a company site or a redirect it sends could name
+    ``http://169.254.169.254/`` (cloud metadata), ``localhost`` or a LAN host,
+    and the server would fetch it with its own network position.  Not an
+    ``httpx.HTTPError`` on purpose, so the retry loop does not ask again.
+    """
+
+
+#: Redirect hops followed per request.  httpx's default is 20; a real careers
+#: page needs one or two, and every hop is one more target to vet.
+MAX_REDIRECTS = 5
 
 
 @dataclass
@@ -350,8 +366,16 @@ class EgressClient:
         cache_ttl: int | None = None,
         store_raw: bool = True,
         negative_cache_ttl: int | None = None,
+        allow_private: bool = False,
+        transport: httpx.AsyncBaseTransport | None = None,
     ):
         s = get_settings()
+        # ``allow_private`` turns the SSRF guard off.  Only for an endpoint the
+        # operator configured on this machine (the local DevTools port), never
+        # for a URL that came from the web or from a user.
+        self.allow_private = allow_private
+        # ``transport`` is a seam for the tests (an httpx.MockTransport).
+        self._transport = transport
         self.settings = s
         self.store_raw = store_raw
         self.respect_robots = s.respect_robots if respect_robots is None else respect_robots
@@ -383,6 +407,11 @@ class EgressClient:
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(30.0, connect=10.0),
             follow_redirects=True,
+            max_redirects=MAX_REDIRECTS,
+            # httpx runs request hooks before *every* hop, redirects included,
+            # so a public URL that 302s to an internal address is refused too.
+            event_hooks={"request": [self._guard_request]},
+            transport=self._transport,
             headers={
                 "User-Agent": self.settings.user_agent,
                 "Accept-Language": "en,nl;q=0.8,fr;q=0.7",
@@ -394,6 +423,37 @@ class EgressClient:
         if self._client:
             await self._client.aclose()
             self._client = None
+
+    async def _guard_request(self, request: httpx.Request) -> None:
+        """SSRF guard: refuse a request whose target is not a public web host.
+
+        Checks the scheme (only http/https: no file://, gopher:// ...) and every
+        address the host resolves to (not just the first: one public and one
+        private record must not pass).  Raises :class:`BlockedTarget`.
+
+        Limit: httpx resolves the name again to connect, so a DNS record that
+        flips between the check and the connect (DNS rebinding) is not caught
+        here; the mail backend pins the address, a web fetch does not yet.
+        """
+        if self.allow_private:
+            return
+        url = request.url
+        if url.scheme not in ("http", "https"):
+            raise BlockedTarget(f"Scheme {url.scheme!r} is not fetched: {url}")
+        host = url.host
+        port = url.port or (443 if url.scheme == "https" else 80)
+        try:
+            # getaddrinfo blocks; keep it off the event loop.
+            addresses = await asyncio.to_thread(resolve_host, host, port)
+        except (OSError, UnicodeError):
+            # An unresolvable name cannot be fetched anyway; let httpx raise
+            # its usual ConnectError so callers see the familiar failure.
+            return
+        if not addresses or not all(is_public_address(a) for a in addresses):
+            raise BlockedTarget(
+                f"{host} resolves to a non-public address (loopback, private, "
+                f"link-local or reserved); not fetching {url}"
+            )
 
     # -- robots.txt (FR-182, CR-402) ---------------------------------------
     def _client_or_raise(self) -> httpx.AsyncClient:
@@ -989,6 +1049,9 @@ class EgressClient:
                 await self.limiter.acquire(domain)
                 try:
                     resp = await client.request(method, url, **request_kwargs)  # type: ignore[arg-type]
+                except BlockedTarget:
+                    self.stats["blocked"] += 1
+                    raise
                 except httpx.HTTPError as exc:
                     if attempt == max_retries - 1:
                         self.stats["errors"] += 1
