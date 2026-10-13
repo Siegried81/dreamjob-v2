@@ -92,3 +92,18 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  docker:
+    name: Docker - build image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # Same command as on a laptop (`docker compose up --build`), minus the
+      # start: proves the Dockerfile + compose file still build after a change.
+      # No .env exists in CI, so an empty one stands in for compose's env_file.
+      - name: Build with compose
+        run: |
+          touch .env
+          docker compose build

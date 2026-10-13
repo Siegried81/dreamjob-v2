@@ -299,6 +299,25 @@ with one line naming the cursor date before which deleting is safe.
 
 ---
 
+### With Docker (Docker Desktop)
+
+One container holds the backend and the built React frontend:
+
+```bash
+cp .env.example .env          # fill DREAMJOB_MASTER_KEY, DREAMJOB_SESSION_SECRET and an LLM key
+docker compose up --build     # builds the image "dreamjob-v2:local", then starts it
+```
+
+Open http://localhost:8000 (use `localhost`, not `127.0.0.1`: passkeys refuse an IP).
+The container mounts the host's `data/` and `logs/`, so it sees the same database,
+accounts and documents as the dev server. **Run one or the other, never both**:
+SQLite locking is not reliable across the Windows/Docker boundary, and two
+schedulers would collect into the same database. The container is never restarted
+on its own (`restart: "no"`). The port is bound to 127.0.0.1 only and mail stays
+in dry-run unless you change `DREAMJOB_MAIL_DRY_RUN` in `docker-compose.yml`.
+Browser automation attaches to a Chrome on the host over CDP, which the container
+cannot reach by default: use the non-Docker setup for that feature.
+
 ## Using it
 
 A first pass, roughly in order:
