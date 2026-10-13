@@ -1,0 +1,40 @@
+# Dream Job - local run with Docker Desktop.
+#
+#   cp .env.example .env      # fill in DREAMJOB_MASTER_KEY / SESSION_SECRET + LLM key
+#   docker compose up --build # builds the image locally, then starts it
+#   -> http://localhost:8000  (use "localhost", not 127.0.0.1: WebAuthn refuses IPs)
+#
+# The container works on the same ./data as the local dev server (the same
+# SQLite database, documents and accounts). Run one or the other, never both:
+# SQLite locking is not reliable across the boundary between Windows and the
+# Docker VM, and two schedulers would collect into the same database. Stop the
+# dev server before `docker compose up`, and `docker compose down` before
+# starting it again.
+
+services:
+  app:
+    # Build from the Dockerfile in this folder: the image shows up in
+    # Docker Desktop -> Images as "dreamjob-v2:local".
+    build: .
+    image: dreamjob-v2:local
+    # Secrets come from .env (git-ignored), never baked into the image.
+    env_file: .env
+    environment:
+      # Force the in-container paths, whatever .env says for the host.
+      DREAMJOB_DATA_DIR: /app/data
+      DREAMJOB_DB_PATH: /app/data/dreamjob.db
+      DREAMJOB_LOG_DIR: /app/logs
+      # Safety default: no real email leaves the container unless you
+      # explicitly override it here.
+      DREAMJOB_MAIL_DRY_RUN: "true"
+    ports:
+      # Bound to 127.0.0.1: reachable from this PC only, not from the LAN.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # The host's data and logs, so the container sees the existing accounts
+      # and vacancies, and what it writes stays on the host.
+      - ./data:/app/data
+      - ./logs:/app/logs
+    # Never restarted on its own: Docker Desktop starting at login would
+    # otherwise bring it up next to a dev server on the same database.
+    restart: "no"

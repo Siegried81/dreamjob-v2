@@ -1,0 +1,37 @@
+# Keep the build context small and secret-free.
+# Secrets: .env is passed at runtime by compose (env_file), never copied in.
+.env
+.env.*
+!.env.example
+*.pem
+credentials.json
+token.json
+
+# Private runtime data and logs (mounted as a volume instead).
+data/
+logs/
+*.db
+
+# Local tooling / caches / build outputs (rebuilt inside the image).
+.git/
+.github/
+.venv/
+venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+frontend/node_modules/
+frontend/dist/
+
+# Not needed at runtime.
+tests/
+docs/
+*.mp4
+
+# Browser profile used by the apply automation: session cookies, never in an image.
+.chrome-profile/
+*.sqlite
+**/node_modules/
+.idea/
