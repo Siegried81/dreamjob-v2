@@ -23,6 +23,7 @@ import pytest
 from dreamjob.config import get_settings
 from dreamjob.db.connection import insert_row, query_all, query_one, utcnow
 from dreamjob.db.repositories import contacts as repo
+from dreamjob.jobs.runner import runner
 from dreamjob.pipeline import contact_backup, introductions
 from dreamjob.pipeline import contacts as pipeline
 from dreamjob.pipeline import email_patterns as patterns
@@ -57,6 +58,11 @@ def isolated_db(tmp_path: Path) -> Iterator[None]:
     migrate()
     yield
 
+    # A test that starts a background job (POST /api/contacts/discover) returns
+    # while the job still runs. Left alone it reads the NEXT test's settings and
+    # writes into that test's database while its migrations run, which failed
+    # later tests with "table job_seeker already exists". Stop it here.
+    runner.shutdown(timeout=5.0)
     for key, value in saved.items():
         if value is None:
             os.environ.pop(key, None)

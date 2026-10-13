@@ -624,7 +624,9 @@ async def probe(url: str | None = None, *, timeout: float = 5.0) -> CdpStatus:
     endpoint = (url or cdp_url()).rstrip("/")
     status = CdpStatus(connected=False, cdp_url=endpoint)
     try:
-        async with EgressClient(respect_robots=False, store_raw=False) as eg:
+        # allow_private: the DevTools endpoint is the operator's own local
+        # browser (127.0.0.1 by default), which the SSRF guard would refuse.
+        async with EgressClient(respect_robots=False, store_raw=False, allow_private=True) as eg:
             version = await asyncio.wait_for(
                 eg.fetch_json(f"{endpoint}/json/version", use_cache=False), timeout
             )

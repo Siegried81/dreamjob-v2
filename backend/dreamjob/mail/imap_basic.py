@@ -100,6 +100,7 @@ from dreamjob.mail.base import (
     register_backend,
 )
 from dreamjob.mail.tls import verified_context
+from dreamjob.security.network import is_public_address, resolve_host
 
 log = logging.getLogger(__name__)
 
@@ -425,37 +426,10 @@ def _check_port(port: int, kind: str) -> None:
         )
 
 
-def _resolve(host: str, port: int) -> list[str]:
-    """Every address ``host`` resolves to.  A seam for the tests (no real DNS)."""
-    infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
-    return [str(info[4][0]) for info in infos]
-
-
-def _is_public(address: str) -> bool:
-    """True only for a globally routable unicast address.
-
-    IPv4-mapped IPv6 (``::ffff:10.0.0.1``) is judged as the IPv4 address it
-    carries, so the mapping cannot be used to smuggle a private target past the
-    check.  ``is_global`` already excludes loopback, RFC 1918, link-local (the
-    169.254.169.254 metadata address among them), carrier-grade NAT, documentation
-    and reserved ranges; the explicit tests are kept so the intent is legible.
-    """
-    try:
-        ip = ipaddress.ip_address(address.split("%", 1)[0])
-    except ValueError:
-        return False
-    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
-        ip = ip.ipv4_mapped
-    if (
-        ip.is_loopback
-        or ip.is_private
-        or ip.is_link_local
-        or ip.is_multicast
-        or ip.is_reserved
-        or ip.is_unspecified
-    ):
-        return False
-    return ip.is_global
+# The address checks live in dreamjob.security.network, shared with the egress
+# HTTP client so both SSRF guards answer "is this host public?" the same way.
+_resolve = resolve_host
+_is_public = is_public_address
 
 
 def check_endpoint(host: str, port: int, *, kind: str) -> str:
