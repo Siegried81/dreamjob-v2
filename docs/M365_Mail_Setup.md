@@ -98,6 +98,7 @@ seeker finishes by removing the app's consent at
   the dispatcher uses the relay.
 - It reads the **Inbox** folder only; a reply filtered into *Junk* or a custom
   folder is not seen.
-- Job-alert e-mails (`mail/job_alerts.py`) are still read from Gmail only.
+- Job-alert e-mails (`mail/job_alerts.py`) are still read from Gmail or the IMAP mailbox in
+  `DREAMJOB_ALERTS_IMAP_*` only.
 - The Microsoft 365 **calendar** client (`postapp/calendar_sync.py`) is
   separate and still has no connection flow.

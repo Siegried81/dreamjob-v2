@@ -21,7 +21,8 @@ and the decisions it deliberately leaves to the job seeker. It is the reference
 for acceptance testing and for anyone who has to explain the product to a user.
 
 Requirement identifiers from the SRS are cited inline (FR-xxx, NFR-xxx, CR-xxx).
-Section 12 maps every requirement to the module that implements it.
+Section 12 summarises requirement coverage and how to regenerate the
+requirement-to-file matrix.
 
 Where the implementation makes a judgement the SRS left open, it is called out
 in a box like this:
@@ -313,7 +314,8 @@ and an administrator's per-source cap is a ceiling a campaign cannot raise.
 
 **Sources whose terms restrict automated access ship disabled by default** and
 require an explicit administrator acknowledgement (IR-101). Indeed and StepStone
-are in that state, as are SmartRecruiters and the social-event adapter; a
+are in that state, as is SmartRecruiters; Jobat, Remotive and the social-event
+adapter are enabled but still wait for that acknowledgement before they run; a
 prohibited source is a refusal the pipeline records rather than an error it
 retries (NFR-403).
 
@@ -672,14 +674,14 @@ without letting anything leave the machine.
 
 ### 8.3 Dispatch (FR-325–FR-327)
 
-Two backends behind one interface:
+Three backends behind one interface:
 
-| | Gmail OAuth | Resend |
-|---|---|---|
-| Sends as | The job seeker's own mailbox | `stephane@stepvda.com` |
-| Replies | Land in the inbox; detected by IMAP | No inbox; webhook events |
-| Credentials | Refresh token, encrypted per job seeker, revocable | API key |
-| Scopes | `gmail.send` + `gmail.readonly` for bounce reading | — |
+| | Gmail OAuth | IMAP + SMTP (`imap_basic`) | Resend |
+|---|---|---|---|
+| Sends as | The job seeker's own mailbox | The job seeker's own mailbox (Yahoo, iCloud, ...) | `DREAMJOB_MAIL_FROM` (default `stephane@stepvda.com`) |
+| Replies | Land in the inbox; detected by IMAP | Land in the inbox; read over IMAP | No inbox; webhook events |
+| Credentials | Refresh token, encrypted per job seeker, revocable | Application password, encrypted per job seeker | API key |
+| Scopes | `gmail.send` + `gmail.readonly` for bounce reading | — (API only: `POST /api/mail/imap/connect`) | — |
 
 A third connection, **Microsoft 365 / Outlook.com over Graph**, is read-only:
 it holds `Mail.Read`, `User.Read` and `offline_access` only, refuses a token
@@ -810,9 +812,10 @@ age. A weekly digest carries new opportunities, replies, follow-ups due,
 watchlist changes and **one** recommended next action, chosen by a priority
 ladder rather than a list the reader has to triage.
 
-The scheduler that runs all of this — reply and bounce polling, watchlist
-rechecks, automatic company enrichment, follow-ups, outcome learning, the digest,
-contact retention and log redaction — **autostarts inside the API process at
+The scheduler that runs all of this — vacancy refresh, job-alert e-mails, reply
+and bounce polling, watchlist rechecks, automatic company enrichment, continuous
+collection (when switched on), geolocation, follow-ups, outcome learning, the
+digest, contact retention and log redaction — **autostarts inside the API process at
 boot** rather than waiting for a cron entry, and can be stopped, started or
 triggered per task from the monitoring screen. It also raises a readiness
 notification once enough outcomes have accumulated for the redirection analysis
@@ -853,8 +856,8 @@ to be worth reading.
 **Isolation (FR-101, FR-344).** Private tables carry a job-seeker id and every
 query filters on it; the shared knowledge base carries **no link back** to the
 job seeker whose campaign produced them, so erasing a seeker leaves the market
-data standing. The division is maintained by the schema itself: of the 90 logical
-tables, 48 carry `job_seeker_id` and are seeker-scoped and 39 are shared (the
+data standing. The division is maintained by the schema itself: of the 92 logical
+tables, 49 carry `job_seeker_id` and are seeker-scoped and 40 are shared (the
 remaining three being the migration ledger and the two FTS5 search tables), with
 `contact` the one restricted table
 that straddles the boundary depending on how the row was collected.
@@ -906,7 +909,8 @@ and refuses to write it if any other job seeker's id is reachable.
 
 **156 of 157 requirements (99%) are cited in the implementation**: 103 of 104
 Must, 44 of 44 Should, 9 of 9 Could. The full matrix — requirement to file — is
-generated from the source and reproduced in the Technical Architecture, §11.
+generated from the source by `scripts/traceability.py --full` (Technical
+Architecture, §11).
 
 The one requirement not cited in code is, by nature:
 
@@ -955,7 +959,7 @@ Carried forward honestly rather than closed:
 - **Microsoft 365 mail is read-only.** A Microsoft 365 or Outlook.com inbox
   connects over Graph with `Mail.Read` only (`mail/m365.py`) and is polled for
   replies and bounces, Inbox folder only; it never sends, the dispatcher never
-  picks it, job alerts are still read from Gmail only, and it needs an app
+  picks it, job alerts are still read from Gmail or an IMAP mailbox only, and it needs an app
   registration the administrator creates (`docs/M365_Mail_Setup.md`). The
   Microsoft 365 **calendar Graph client is implemented but not connectable**
   because its OAuth exchange is not exposed. Gmail and Google Calendar are
