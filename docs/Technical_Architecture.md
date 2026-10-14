@@ -37,7 +37,7 @@ of taking those constraints seriously rather than working around them.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  React SPA       24 screens · lazy-loaded · 110 KB initial (gzip)    │
+│  React SPA       24 screens · lazy-loaded · 107 KB initial (gzip)    │
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │  /api  (session cookie, client-bound)
 ┌───────────────────────────────▼──────────────────────────────────────┐
@@ -50,7 +50,7 @@ of taking those constraints seriously rather than working around them.
 │                  post-application                                    │
 ├───────────────┬──────────────┬───────────────┬──────────────┬────────┤
 │  LLMClient    │ EgressClient │ SourceAdapter │  JobRunner   │ crypto │
-│  budget       │ robots       │ 30 adapters   │  resumable   │ AES-   │
+│  budget       │ robots       │ 30 enabled    │  resumable   │ AES-   │
 │  redaction    │ rate limit   │ plan/fetch/   │  pause/      │ GCM    │
 │  injection    │ cache        │ parse/        │  cancel      │ per    │
 │  fencing      │ raw capture  │ normalise     │  checkpoint  │ seeker │
@@ -67,9 +67,9 @@ of taking those constraints seriously rather than working around them.
    (or local)     ATS / sites     NBB, KBO…     Resend · M365 (read)
 ```
 
-**Scale** (re-derived 2026-10-12; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
-`tests/**/*.py`). 244 Python modules / 128,284 lines · 147 JS modules /
-45,056 lines · 140 test files / 69,219 lines · 45 migrations · 24 versioned
+**Scale** (re-derived 2026-10-14; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
+`tests/**/*.py`). 245 Python modules / 128,409 lines · 147 JS modules /
+45,056 lines · 142 test files / 69,657 lines · 46 migrations · 24 versioned
 prompt templates · 36 declared source adapters, 30 of them enabled. The
 offline pass count is in `README.md`, which is where it is re-derived.
 
@@ -79,7 +79,7 @@ offline pass count is in `README.md`, which is where it is re-derived.
 
 The architecture rests on funnelling five concerns through exactly one place
 each. That is what makes the corresponding requirements *enforceable* rather
-than aspirational — each is a property of one module, not a convention 219
+than aspirational — each is a property of one module, not a convention 245
 modules have to remember. Two more funnels were added as the Discover phase
 grew: the employer-kind verdict and the company-domain decision.
 
@@ -106,7 +106,7 @@ at the boundary. Migrations are forward-only `NNN_name.sql` files with a
 recorded checksum; editing an applied migration is a warning, not a silent
 divergence.
 
-**Schema shape.** 92 logical tables across 45 migrations — 49 seeker-scoped, 40
+**Schema shape.** 92 logical tables across 46 migrations — 49 seeker-scoped, 40
 shared, one migration ledger, and two FTS5 virtual tables; the nine FTS5 shadow
 tables take `sqlite_master` to 101 — plus a
 `usable_contact` view that encodes the objection rule at the database:
@@ -243,7 +243,7 @@ one-writer invariant.
 | Sessions (NFR-202) | Random token; only the HMAC is stored; bound to a UA+IP fingerprint and re-checked per request; revoked on password change, admin reset and suspension |
 | Accounts (FR-108) | First account is admin; create/suspend/reset/delete, with a last-active-administrator guard and a self-guard |
 | Third-party credentials (NFR-203) | **Never stored.** Browser automation attaches to a session the user owns |
-| Mail tokens (NFR-204) | Encrypted, scoped to send + bounce-read, revocable from the UI |
+| Mail tokens (NFR-204) | Encrypted, scoped to send + bounce-read, revocable from the UI; an `imap_basic` application password is encrypted the same way but is not scoped by the provider |
 | Prompt injection (NFR-205) | Content isolation, instruction/data separation, output validation |
 | Leakage (NFR-206) | Generated documents scanned against the job seeker's own provenance set |
 | Objections (NFR-302) | Enforced in a `usable_contact` view, not only in the interface |
@@ -259,7 +259,7 @@ SQLCipher would add a dependency.
 
 ## 5. Frontend
 
-**React 18 + Vite + react-router-dom v7.** Five dependencies in total: react,
+**React 19 + Vite 8 + react-router-dom v7.** Five dependencies in total: react,
 react-dom, react-router-dom, vite, @vitejs/plugin-react. No UI kit, no chart
 library, no date library, no state manager — charts are inline SVG, icons are
 inline SVG, state is hooks plus one session context.
@@ -274,8 +274,8 @@ spine, not the whole surface.
 the workflow map and the employer panel) behind a shared shell:
 
 ```
-initial   348 KB  (110 KB gzip)  shell + design system + router
-per page  7–74 KB (3–20 KB gzip) loaded on navigation
+initial   318 KB JS + 59 KB CSS  (107 + 12 KB gzip)  shell + design system + router
+per page  6–88 KB (2–24 KB gzip) loaded on navigation
 ```
 
 Down from 858 KB unsplit — the administration area and the PDF previews no
@@ -305,7 +305,7 @@ survives on colour alone. `prefers-reduced-motion` disables animation.
 **Help is structural, not optional.** All copy lives in `help/content.js` — 21
 screen entries and 142 glossary terms — so it is reviewable as a whole and
 translatable as a unit (NFR-501). A screen cannot ship without help because the
-drawer resolves its content from the route. **305 inline concept tips** across
+drawer resolves its content from the route. **311 inline concept tips** across
 the screens; `?` opens the panel anywhere.
 
 ---
@@ -323,9 +323,11 @@ PYTHONPATH=backend python3 -m dreamjob.security.crypto --generate-key   # master
 Production is the same process serving the built SPA from `frontend/dist`.
 Migrations run at startup. The **monitoring scheduler autostarts inside the API
 process at boot** (controlled by `DREAMJOB_SCHEDULER_ENABLED`, with
-`DREAMJOB_SCHEDULER_AUTOSTART` as an override) and runs eight tasks — reply and
-bounce polling, watchlist rechecks, automatic company enrichment, follow-ups,
-outcome learning, the weekly digest, contact retention and LLM log redaction.
+`DREAMJOB_SCHEDULER_AUTOSTART` as an override) and runs twelve tasks — vacancy refresh,
+job-alert e-mails, reply and bounce polling, watchlist rechecks, automatic company
+enrichment, continuous collection (idle until switched on in Admin), geolocation,
+follow-ups, outcome learning, the weekly digest, contact retention and LLM log
+redaction.
 `--once` remains available from an external cron, and any task can be stopped,
 started or triggered from the monitoring screen.
 
@@ -402,8 +404,9 @@ profiled as if it were the client.
 
 ## 9. Testing
 
-**2,461 tests collected, 69,219 lines across 140 files** (`tests/**/*.py`,
-re-counted 2026-10-12; `-m 'not llm and not load'` deselects 14, leaving 2,447.
+**2,490 tests collected, 69,657 lines across 142 files** (`tests/**/*.py`,
+re-counted 2026-10-14; `-m 'not llm and not load'` deselects 14, leaving 2,452,
+of which the CI command's `tests/unit tests/integration` runs 2,442.
 The offline pass count is in `README.md`, which is where it is re-derived).
 Each runs against a migrated temporary database and without network access; LLM
 and HTTP paths are stubbed or skipped, and the network and load tests are

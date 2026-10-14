@@ -22,6 +22,16 @@ it starts from a single snapshot, so the commit history here begins at that
 point rather than carrying the shared one. Work done here is offered back
 upstream as a pull request rather than pushed to it.
 
+Most of the application came with that snapshot (commit `422d760`, 2026-10-06),
+including 2,193 of the 2,442 tests the CI command runs today. What was built in
+this repository since is readable from `git log`: CI and Dependabot, the Windows
+fixes, the `imap_basic` mail backend, `scripts/ingest_alerts.py`, area search
+(ported from upstream), the French register adapter, the read-only Microsoft 365
+inbox, WebAuthn passkeys, the search-provider form, the employer-kind gates on
+the research passes, the semantic index in the API and scoring, the vacancy
+de-duplication migration and the Docker setup. Dated reports under `docs/`
+signed or dated before 2026-10-06 describe upstream runs.
+
 ---
 
 ## What it does
@@ -37,7 +47,7 @@ upstream as a pull request rather than pushed to it.
 
 - **Builds a profile you can trust.** Your LinkedIn export and CV are merged
   (8 experience entries, 27 skills, a 1,163-character summary and a photo on the
-  product owner's real pair), and every disagreement between them is surfaced
+  upstream product owner's real pair), and every disagreement between them is surfaced
   for you to resolve rather than silently decided. The real pair produces 18
   conflicts — role dates, employer names, titles — and each is resolved with
   LinkedIn's value, the CV's value or your own.
@@ -80,7 +90,7 @@ the mail transport defaults to dry-run (RK-05): no message can leave by accident
 | Phase | What happens | Screens |
 |---|---|---|
 | **1 · Profile** | Intake, conflict resolution, skills, evidence, personas, composite profile, dream job model | Profile, Composite, Dream job |
-| **2 · Plan** | Structured directives, campaign plan, reuse report, collection from 29 sources | Directives, Campaigns, Apply browser |
+| **2 · Plan** | Structured directives, campaign plan, reuse report, collection from 30 enabled sources | Directives, Campaigns, Apply browser |
 | **3 · Discover** | Company domains, employer kind, profiles, five-year financials, signals, opportunities, ranking | Companies, Opportunities, Intelligence |
 | **4 · Apply** | Contacts, validation, tailored CV, briefing, motivation, email, bulk approval, dispatch | Contacts, Applications, Mail |
 | **5 · Follow up** | Responses, pipeline board, reply drafts, calendar, mock interviews, learning, monitoring | Pipeline, Responses, Insights, Monitoring |
@@ -91,7 +101,7 @@ each showing what is done, what is running and — when something is blocked —
 one-line version of the map sits at the top of every working screen.
 
 Press **`?`** on any screen for its instructions, or click the **?** beside any
-label for that concept. 21 screens documented, 142 glossary terms, 305 inline
+label for that concept. 21 screens documented, 142 glossary terms, 311 inline
 tips: the help is part of the product, not an afterthought.
 
 ---
@@ -110,7 +120,7 @@ backend/dreamjob
                         scoring · contacts · generation · autopilot
   adapters              30 source adapters over one four-step contract
   documents             CV, briefing, motivation and email generation
-  mail                  Gmail OAuth and Resend behind one interface; read-only Microsoft 365 inbox
+  mail                  Gmail OAuth, IMAP and Resend behind one interface; read-only Microsoft 365 inbox
   postapp               pipeline board, replies, learning, mock interviews
   browser               CDP / Playwright attach-only automation
   intelligence          gap analysis, stepping stones, values, events
@@ -133,11 +143,12 @@ than aspirational:
 | employer-kind verdict | `pipeline/employer_resolver.py` | no verdict without evidence |
 | company-domain decision | `pipeline/company_domains.py` | a namesake domain is refused, visibly |
 
-**Scale** (re-derived 2026-10-12; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
-`tests/**/*.py`): 244 Python modules / 128,284 lines ·
-147 JS modules / 45,056 lines · 140 test files / 69,219 lines ·
-**2,389 of 2,413 tests pass offline** · 101 tables · 158 indexes ·
-45 migrations · 36 adapter modules · 24 versioned prompt templates.
+**Scale** (re-derived 2026-10-14; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
+`tests/**/*.py`): 245 Python modules / 128,409 lines ·
+147 JS modules / 45,056 lines · 142 test files / 69,657 lines ·
+**2,427 of 2,442 tests pass offline, 15 skipped, none failing** (backend; the
+frontend has no test suite) · 101 tables · 158 indexes ·
+46 migrations · 36 source adapters · 24 versioned prompt templates.
 **156 of 157 requirements (99%)** from the specification are cited in the
 source: 103/104 Must, 44/44 Should, 9/9 Could.
 
@@ -154,9 +165,10 @@ source: 103/104 Must, 44/44 Should, 9/9 Could.
 | Compensation | 1 | Eurostat Structure of Earnings Survey |
 
 The counts above are rows in `source_catalogue`: **36 declared, 30 enabled**.
-Indeed, StepStone, SmartRecruiters and the social-event adapter ship disabled
-until an administrator acknowledges their terms of service (IR-101); `board.jobat`
-is enabled but also awaits that acknowledgement, and `board.generic`,
+Indeed, StepStone and SmartRecruiters ship disabled until an administrator
+acknowledges their terms of service (IR-101); `board.jobat`, `board.remotive`
+and the social-event adapter (`events.social`) are enabled but also await that
+acknowledgement, and `board.generic`,
 `board.vdab` and `board.wttj` are declared and disabled.
 
 **Contact discovery** does not stop at the company home page. It reads the
@@ -174,7 +186,7 @@ provider, once switched on, also serves profile enrichment's searches. A blocked
 
 SQLite in WAL mode with a deliberate **one-writer** discipline; repositories are
 the only place SQL is written, and return plain dicts. 92 logical tables across
-45 forward-only migrations: 49 seeker-scoped (they carry `job_seeker_id`),
+46 forward-only migrations: 49 seeker-scoped (they carry `job_seeker_id`),
 40 shared knowledge-base, one migration ledger and two FTS5 search tables. The
 nine FTS5 shadow tables bring `sqlite_master` to the 101 tables counted above.
 Plus a `usable_contact` view that encodes the objection rule at the database.
@@ -191,7 +203,7 @@ file itself relies on disk encryption.
 
 ## Running it
 
-**Requirements:** Python 3.11+, Node 18+, and a DeepSeek API key.
+**Requirements:** Python 3.11+, Node 20.19+ (Vite 8), and a DeepSeek API key.
 
 ```bash
 git clone https://github.com/Siegried81/dreamjob-v2.git && cd dreamjob-v2
@@ -237,12 +249,15 @@ attaches and never sees your credentials.
 > shows this warning before the first run and refuses to proceed until you
 > acknowledge it. The decision is yours to make knowingly.
 
-**Sending mail** — either backend:
+**Sending mail** — one of three backends:
 
 - *Gmail OAuth* — set `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET`, then connect on
   the Mail setup screen. Replies land in your own inbox and are detected.
 - *Resend* — set `RESEND_API_KEY`. Sends from your own domain; no inbox, so
   replies are recorded by webhook or entered by hand.
+- *IMAP + SMTP* (`imap_basic`) — any mailbox that issues an application
+  password (Yahoo, iCloud, ...), connected through `POST /api/mail/imap/connect`;
+  replies land in that inbox. The Mail screen has no form for it yet.
 
 **Reading a Microsoft 365 / Outlook.com inbox** — read-only, for reply and
 bounce detection: register an app as described in
@@ -345,8 +360,9 @@ write to rather than configuring each stage.
 ## Configuration
 
 All runtime configuration is read once from `.env` / the environment into a
-frozen settings object; nothing reads `os.environ` directly, so the Admin screen
-can show what is in force. Groups include:
+frozen settings object, so the Admin screen can show what is in force; the only
+direct `os.environ` reads are optional registry API keys,
+`DREAMJOB_SCHEDULER_AUTOSTART` and `DREAMJOB_APPLY_ALLOW_SEND`. Groups include:
 
 - **Core** — `DREAMJOB_ENV`, `DREAMJOB_HOST`, `DREAMJOB_PORT`, `DREAMJOB_DATA_DIR`, `DREAMJOB_DB_PATH`
 - **Keys** — `DREAMJOB_MASTER_KEY`, `DREAMJOB_SESSION_SECRET`
@@ -459,7 +475,7 @@ Stated rather than glossed:
 - **Microsoft 365 mail is read-only and API-only.** A Microsoft inbox can be
   connected (after the app registration in `docs/M365_Mail_Setup.md`) and is
   polled for replies and bounces, Inbox folder only; it cannot send, job
-  alerts are still read from Gmail only, and the Mail screen has no button for
+  alerts are still read from Gmail or an IMAP mailbox only, and the Mail screen has no button for
   it yet. The Microsoft 365 calendar Graph client still cannot be connected.
 - **Without a search provider, profile enrichment searches DuckDuckGo**, which
   returns a bot-check page from datacentre ranges, so enrichment degrades to
