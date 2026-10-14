@@ -68,8 +68,8 @@ of taking those constraints seriously rather than working around them.
 ```
 
 **Scale** (re-derived 2026-10-14; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
-`tests/**/*.py`). 244 Python modules / 128,316 lines · 147 JS modules /
-45,056 lines · 141 test files / 69,460 lines · 46 migrations · 24 versioned
+`tests/**/*.py`). 245 Python modules / 128,409 lines · 147 JS modules /
+45,056 lines · 142 test files / 69,657 lines · 46 migrations · 24 versioned
 prompt templates · 36 declared source adapters, 30 of them enabled. The
 offline pass count is in `README.md`, which is where it is re-derived.
 
@@ -79,7 +79,7 @@ offline pass count is in `README.md`, which is where it is re-derived.
 
 The architecture rests on funnelling five concerns through exactly one place
 each. That is what makes the corresponding requirements *enforceable* rather
-than aspirational — each is a property of one module, not a convention 244
+than aspirational — each is a property of one module, not a convention 245
 modules have to remember. Two more funnels were added as the Discover phase
 grew: the employer-kind verdict and the company-domain decision.
 
@@ -404,9 +404,9 @@ profiled as if it were the client.
 
 ## 9. Testing
 
-**2,466 tests collected, 69,460 lines across 141 files** (`tests/**/*.py`,
+**2,490 tests collected, 69,657 lines across 142 files** (`tests/**/*.py`,
 re-counted 2026-10-14; `-m 'not llm and not load'` deselects 14, leaving 2,452,
-of which the CI command's `tests/unit tests/integration` runs 2,418.
+of which the CI command's `tests/unit tests/integration` runs 2,442.
 The offline pass count is in `README.md`, which is where it is re-derived).
 Each runs against a migrated temporary database and without network access; LLM
 and HTTP paths are stubbed or skipped, and the network and load tests are
