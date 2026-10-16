@@ -9,7 +9,7 @@ task                          default     what it does
                                           ranked lists and adds new postings
                                           (``DREAMJOB_VACANCY_REFRESH_SECONDS``)
 ``job_alerts``                15 minutes  reads the LinkedIn, ictjob.be,
-                                          Glassdoor and Jobat alert e-mails
+                                          Glassdoor, Jobat and Karimi alert e-mails
                                           in connected mailboxes; a Jobat
                                           alert carries no posting link, so
                                           its rows are leads to look up
@@ -435,7 +435,7 @@ async def _run_job_alerts() -> dict[str, Any]:
     """Turn job-alert e-mails into ranked opportunities (FR-261).
 
     Senders are whatever mail/job_alerts.py ALERT_SOURCES declares -
-    LinkedIn, ictjob.be, Glassdoor and Jobat today. Jobat rows carry no URL
+    LinkedIn, ictjob.be, Glassdoor, Jobat and Karimi today. Jobat rows carry no URL
     and are leads to look up, not links.
 
     Gmail API calls and the writes under them are synchronous, so the pass runs
@@ -516,7 +516,7 @@ DEFAULT_TASKS: list[Task] = [
          "Re-read followed ATS boards and add new postings to the ranked lists",
          enabled=_VACANCY_REFRESH_SECONDS > 0),
     Task("job_alerts", max(60, _JOB_ALERTS_SECONDS), _run_job_alerts,
-         "Read LinkedIn, ictjob.be, Glassdoor and Jobat job-alert e-mails into "
+         "Read LinkedIn, ictjob.be, Glassdoor, Jobat and Karimi job-alert e-mails into "
          "the ranked lists (Jobat's arrive as leads, with no posting link)",
          enabled=_JOB_ALERTS_SECONDS > 0),
     Task("replies", 15 * 60, _run_replies,

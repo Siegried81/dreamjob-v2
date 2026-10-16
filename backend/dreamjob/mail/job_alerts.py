@@ -4,9 +4,10 @@ LinkedIn, ictjob.be, Glassdoor and Jobat all forbid or block automated
 collection of their sites, and all of them offer what the seeker actually needs
 instead: job-alert e-mails.  Reading those e-mails in the seeker's own inbox is
 ordinary use of a service the seeker subscribed to, so this module is the lawful
-route to those sources:
+route to those sources.  Karimi's weekly job digest is read the same way.
 
-*It never visits linkedin.com, ictjob.be, glassdoor.com or any jobat.be host.*
+*It never visits linkedin.com, ictjob.be, glassdoor.com, karimi.ai or any
+jobat.be host.*
 It reads messages already delivered to a mailbox the seeker connected - Gmail
 with ``gmail.readonly``, the scope the mail slice already requests, or another
 provider such as Yahoo over read-only IMAP with an app password
@@ -94,7 +95,7 @@ class AlertSource:
     #: The canonical posting URL built from ``{id}`` (and the link's ``{host}``),
     #: or ``None`` to keep the matched URL without its tracking query.
     canonical: str | None
-    #: ``title_first`` (LinkedIn, ictjob), ``employer_first`` (Glassdoor:
+    #: ``title_first`` (LinkedIn, ictjob, Karimi), ``employer_first`` (Glassdoor:
     #: employer, rating, title, place inside the posting link) or
     #: ``lead_cards`` (Jobat: no posting link, cards read by their shape).
     layout: str = "title_first"
@@ -162,13 +163,29 @@ ALERT_SOURCES: tuple[AlertSource, ...] = (
         canonical=None,
         layout="lead_cards",
     ),
+    AlertSource(
+        key="alert.karimi",
+        label="Karimi job digest",
+        sender_domain="karimi.ai",
+        # The digest is signed by a person (nicolas.cartiaux@karimi.ai), so the
+        # prefix is left open for the same reason as Jobat's.
+        sender_prefixes=(),
+        # Job cards and "Companies worth watching" cards share one URL and
+        # differ only by ``type``; only ``type=job`` is a posting.  The
+        # canonical URL drops the per-recipient ``x=`` token every link carries.
+        link_re=re.compile(
+            r"karimi\.ai/[^\s\"'<>]*?/talent/discover/card\?id=([0-9a-f]+)&type=job\b",
+            re.IGNORECASE,
+        ),
+        canonical="https://app.karimi.ai/en/talent/discover/card?id={id}&type=job",
+    ),
 )
 
 #: Gmail search for the alert senders; ``after:`` or ``newer_than:`` is added.
 GMAIL_QUERY = (
     "from:(jobalerts-noreply@linkedin.com OR jobs-noreply@linkedin.com "
     "OR jobs-listings@linkedin.com OR ictjob.be OR noreply@glassdoor.com "
-    "OR jobat.be)"
+    "OR jobat.be OR karimi.ai)"
 )
 
 #: How far back the first pass of a newly connected mailbox looks.
@@ -193,7 +210,7 @@ _BUTTON_TEXTS = {
     "voir l'offre", "voir les offres", "postuler", "candidature simplifiée",
     "bekijk vacature", "bekijk vacatures", "solliciteren", "vacature bekijken",
     "more", "plus", "meer", "candidature facile", "afficher plus", "show more",
-    "snel solliciteren", "toon meer",
+    "snel solliciteren", "toon meer", "see more",
 }
 
 
@@ -275,8 +292,14 @@ def _posting_url(source: AlertSource, href: str, posting_id: str) -> str:
     return href.split("?", 1)[0].split("#", 1)[0]
 
 
-def _employer_and_place(texts: list[str]) -> tuple[str | None, str | None]:
-    """Read the "Employer · Location" line (or two lines) under a title."""
+def _employer_and_place(texts: list[str]) -> tuple[str | None, str | None, str | None]:
+    """Read the "Employer · Location" line (or two lines) under a title.
+
+    The third value is whatever the same line carries after the place, joined
+    back ("Hybrid · Mid-level" on a Karimi card), or ``None``.  It is returned
+    raw: ``normalise_work_arrangement`` reads an arrangement out of free text
+    and ignores the rest, so the caller need not know each board's order.
+    """
     parts: list[str] = []
     for text in texts:
         parts.extend(p.strip() for p in re.split(r"\s[·•|]\s|\s-\s", text) if p.strip())
@@ -284,7 +307,8 @@ def _employer_and_place(texts: list[str]) -> tuple[str | None, str | None]:
             break
     employer = parts[0] if parts else None
     place = parts[1] if len(parts) > 1 else None
-    return employer, place
+    rest = " · ".join(parts[2:]) or None
+    return employer, place, rest
 
 
 def parse_alert(message: EmailMessage, source: AlertSource) -> list[dict[str, Any]]:
@@ -379,12 +403,12 @@ def _read_posting(
       after it, up to the next link.
     """
     words = [t for t, _ in texts if t.lower() not in _BUTTON_TEXTS and not _LEAD_IN_RE.search(t)]
-    employer = place = None
+    employer = place = rest = None
     title = None
     dotted = next((t for t in words if re.search(r"\s[·•]\s", t)), None)
     at_index = next((i for i, t in enumerate(words) if t.lower() in _AT_WORDS), None)
     if dotted is not None:
-        employer, place = _employer_and_place([dotted])
+        employer, place, rest = _employer_and_place([dotted])
         title = next((t for t in words if t != dotted and t.lower() not in _AT_WORDS), None)
     elif at_index is not None:
         title = words[at_index - 1] if at_index > 0 else None
@@ -398,11 +422,12 @@ def _read_posting(
                 if href:
                     break
                 following.append(text)
-            employer, place = _employer_and_place(following)
+            employer, place, rest = _employer_and_place(following)
     if not title:
         return None
 
-    arrangement = None
+    # "Brussels (Hybrid)" on LinkedIn, or a separate "· Hybrid ·" part on Karimi.
+    arrangement = rest
     match = _ARRANGEMENT_RE.match(place or "")
     if match:
         place, arrangement = match.group("place") or None, match.group("mode")

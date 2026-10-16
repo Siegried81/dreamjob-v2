@@ -21,7 +21,7 @@ must not be confused:
 
 * ``job_alerts`` (settings ``DREAMJOB_ALERTS_IMAP_*``, one mailbox configured
   by the operator in ``.env``) is a **read-only scan of known job-alert
-  senders** - LinkedIn, ictjob, Glassdoor, Jobat - whose postings become
+  senders** - LinkedIn, ictjob, Glassdoor, Jobat, Karimi - whose postings become
   *vacancies*.  It never sends and never looks at any other message.
 * ``imap_basic`` (this module, one row per job seeker in ``mail_account``,
   connected through ``/api/mail/imap/connect``) is **the mailbox Dream Job

@@ -228,7 +228,8 @@ def test_the_imap_search_names_every_alert_sender_and_a_day(monkeypatch) -> None
     assert imap.selected == ("INBOX", True)        # read-only
     assert imap.searches[0][1:] == (
         "OR", "FROM", '"linkedin.com"', "OR", "FROM", '"ictjob.be"',
-        "OR", "FROM", '"glassdoor.com"', "FROM", '"jobat.be"',
+        "OR", "FROM", '"glassdoor.com"', "OR", "FROM", '"jobat.be"',
+        "FROM", '"karimi.ai"',
         "SINCE", "04-Oct-2026",
     )
     assert imap.closed
@@ -541,7 +542,7 @@ def test_a_jobat_pass_feeds_leads_once() -> None:
 
 def test_the_three_linked_senders_are_untouched_by_the_link_less_one() -> None:
     """The optional link pattern must not have moved anything for the others."""
-    linkedin, ictjob, glassdoor, jobat = job_alerts.ALERT_SOURCES
+    linkedin, ictjob, glassdoor, jobat = job_alerts.ALERT_SOURCES[:4]
     assert [s.key for s in (linkedin, ictjob, glassdoor)] == [
         "alert.linkedin", "alert.ictjob", "alert.glassdoor"]
     assert not any(s.is_lead_only for s in (linkedin, ictjob, glassdoor))
@@ -750,3 +751,71 @@ def test_an_href_with_no_posting_host_never_yields_a_third_party_url() -> None:
     url = job_alerts._posting_url(_glassdoor(), href, "1009123456")
     assert "evil.example" not in url
     assert url == "https://glassdoor.com/partner/jobListing.htm?jobListingId=1009123456"
+
+
+# ---------------------------------------------------------------------------
+# Karimi: a weekly digest with job cards and company cards
+# ---------------------------------------------------------------------------
+
+# The card markup of a delivered Karimi newsletter, trimmed to two job cards,
+# one company card and the buttons; the per-recipient ``x=`` token is faked.
+_KARIMI_CARD = ("https://app.karimi.ai/en/talent/discover/card?id={id}&amp;type={kind}"
+                "&amp;utm_source=newsletter&amp;content_type={kind}-0&amp;x=TOKEN.sig")
+KARIMI_HTML = """
+<html><body>
+<div style="display:none">Sieg, this is your weekly Karimi update, picked only for you.</div>
+<h2 id="jobs"><span>Jobs</span> <span>coming your way</span></h2>
+<table><tr><td><a href="{a}"><img alt="AI Engineer" src="logo.jpg"/></a></td>
+ <td><p><a href="{a}">AI Engineer</a></p><p>Bluecrux · BE · Hybrid · Mid-level</p></td></tr>
+ <tr><td><p>Builds AI apps and agents.<!-- --> <a href="{a}">See more </a></p></td></tr></table>
+<table><tr><td><a href="{b}"><img alt="Senior Data Scientist (K10052)" src="logo.jpg"/></a></td>
+ <td><p><a href="{b}">Senior Data Scientist (K10052)</a></p>
+ <p>ProUnity · Brussels, BE · Hybrid · Senior</p></td></tr>
+ <tr><td><p>Scalable ML on Azure Databricks.<!-- --> <a href="{b}">See more </a></p></td></tr></table>
+<a href="https://app.karimi.ai/en/talent/discover/jobs/discover?utm_source=newsletter">Discover more jobs</a>
+<h2 id="companies"><span>Companies</span> <span>worth watching</span></h2>
+<table><tr><td><p><a href="{c}">Figen AI</a></p><p>Financial Services · France</p></td></tr>
+ <tr><td><p>AI agents for wealth management.<!-- --> <a href="{c}">See more </a></p></td></tr></table>
+<a href="https://app.karimi.ai/api/unsubscribe?token=TOKEN.sig">Unsubscribe</a>
+</body></html>
+""".format(
+    a=_KARIMI_CARD.format(id="6aacf32816065a8b60364923", kind="job"),
+    b=_KARIMI_CARD.format(id="6a9674a69d72235221ad9ffa", kind="job"),
+    c=_KARIMI_CARD.format(id="6a0c6dbda2b51c974a7e92de", kind="company"),
+)
+
+
+def test_a_karimi_digest_yields_its_job_cards_and_not_its_companies() -> None:
+    source = job_alerts.source_for("nicolas.cartiaux@karimi.ai")
+    assert source is not None and source.key == "alert.karimi"
+    message = _parsed(_message("Nicolas from Karimi <nicolas.cartiaux@karimi.ai>", KARIMI_HTML,
+                               subject="Sieg, 7 roles that fit your profile this week"))
+    postings = job_alerts.parse_alert(message, source)
+
+    assert [(p["title"], p["employer"], p["location"]) for p in postings] == [
+        ("AI Engineer", "Bluecrux", "BE"),
+        ("Senior Data Scientist (K10052)", "ProUnity", "Brussels, BE"),
+    ]
+    # The canonical URL keeps the card id and drops the recipient's token.
+    assert postings[0]["source_url"] == (
+        "https://app.karimi.ai/en/talent/discover/card?id=6aacf32816065a8b60364923&type=job")
+    assert all("TOKEN" not in p["source_url"] for p in postings)
+
+
+def test_a_karimi_card_keeps_its_work_arrangement() -> None:
+    """"Employer · Place · Hybrid · Mid-level": the part after the place is the arrangement."""
+    source = job_alerts.source_for("nicolas.cartiaux@karimi.ai")
+    html = KARIMI_HTML.replace("ProUnity · Brussels, BE · Hybrid", "ProUnity · Brussels, BE · On-Site")
+    postings = job_alerts.parse_alert(_parsed(_message("Karimi <x@karimi.ai>", html)), source)
+    records = job_alerts.to_records(postings, source, "2026-10-16T07:43:51+00:00")
+
+    assert [r.data["work_arrangement"] for r in records] == ["hybrid", "onsite"]
+    assert [r.data["location"] for r in records] == ["BE", "Brussels, BE"]
+
+
+def test_see_more_is_a_button_not_a_title() -> None:
+    """A short title must not lose to the "See more" link of its own card."""
+    html = KARIMI_HTML.replace(">AI Engineer</a></p>", ">CFO</a></p>")
+    message = _parsed(_message("Karimi <nicolas.cartiaux@karimi.ai>", html))
+    postings = job_alerts.parse_alert(message, job_alerts.source_for("x@karimi.ai"))
+    assert postings[0]["title"] == "CFO"
