@@ -127,7 +127,7 @@ jobs:
       # continue-on-error so a description problem never fails a good publish.
       - if: env.DOCKERHUB_USERNAME != '' && github.ref == 'refs/heads/main'
         continue-on-error: true
-        uses: peter-evans/dockerhub-description@v4
+        uses: peter-evans/dockerhub-description@v5
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
