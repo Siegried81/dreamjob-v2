@@ -48,3 +48,12 @@ ruff==0.17.0  # pinned: CI installs whatever this resolves to, and a new ruff re
 # took 50 tests down on a fresh Windows clone (mail dispatch windows, post-app
 # monitoring, the apply browser). The old clone had it only transitively.
 tzdata>=2026.5
+
+# --- Optional: Qdrant semantic backend -------------------------------------
+# Only needed when DREAMJOB_SEMANTIC_BACKEND=qdrant.  The default "sqlite"
+# backend keeps the vectors in the embedding table and needs nothing extra, so
+# this line is left commented: uncomment it (or `pip install qdrant-client`) on
+# a deployment that chooses Qdrant.  The code imports it lazily and prints an
+# install hint if it is missing, so a forgotten install fails loudly, not
+# silently.  Also exposed as the `qdrant` extra in pyproject.toml.
+# qdrant-client>=1.12.0
