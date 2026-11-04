@@ -84,6 +84,21 @@ class Settings(BaseSettings):
     # it on changes what a score means, so it is an explicit operator choice.
     semantic_scoring: bool = Field(False, alias="DREAMJOB_SEMANTIC_SCORING")
 
+    # Where the semantic index keeps its vectors.  "sqlite" (default) stores
+    # them in the embedding table and ranks them in pure Python - no extra
+    # service, works on the SQLite the product already ships.  "qdrant"
+    # offloads the vectors to a Qdrant server (pipeline.semantic_qdrant) and
+    # lets it rank them.  The two are interchangeable: both read the same
+    # embeddings model and both return cosine similarities with the same
+    # meaning, so switching the backend does not change what a `similarity`
+    # number is.  The default stays "sqlite" so no existing installation
+    # changes behaviour, and the qdrant-client package is only needed when the
+    # flag names "qdrant".
+    semantic_backend: str = Field("sqlite", alias="DREAMJOB_SEMANTIC_BACKEND")
+    qdrant_url: str = Field("http://localhost:6333", alias="DREAMJOB_QDRANT_URL")
+    # One Qdrant collection per entity_type, named "<prefix>_<entity_type>".
+    qdrant_collection_prefix: str = Field("dreamjob", alias="DREAMJOB_QDRANT_COLLECTION_PREFIX")
+
     default_token_budget: int = Field(2_000_000, alias="DREAMJOB_DEFAULT_TOKEN_BUDGET")
     # How many opportunities of a campaign earn an LLM scoring call (NFR-104;
     # docs/Data_Gathering_Plan.md N11).  A campaign can produce ~93,000
@@ -244,6 +259,22 @@ class Settings(BaseSettings):
             hh, mm = v.split(":")[:2]
             return time(int(hh), int(mm))
         return v
+
+    @field_validator("semantic_backend", mode="before")
+    @classmethod
+    def _normalise_semantic_backend(cls, v: object) -> object:
+        # A typo here would silently fall back to one store or the other, which
+        # is exactly the kind of quiet wrong behaviour this project refuses, so
+        # an unknown value is a loud configuration error on boot.
+        if v is None or v == "":
+            return "sqlite"
+        value = str(v).strip().lower()
+        if value not in {"sqlite", "qdrant"}:
+            raise ValueError(
+                "DREAMJOB_SEMANTIC_BACKEND must be 'sqlite' or 'qdrant', "
+                f"not {v!r}"
+            )
+        return value
 
     # --- Derived helpers ---------------------------------------------------
     @property

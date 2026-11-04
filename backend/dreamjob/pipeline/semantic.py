@@ -19,10 +19,22 @@ import logging
 import math
 from typing import Any
 
+from dreamjob.config import get_settings
 from dreamjob.db.connection import insert_row, new_id, query_all, update_row, utcnow
 from dreamjob.llm.client import LLMClient
 
 log = logging.getLogger(__name__)
+
+
+def _use_qdrant() -> bool:
+    """True when the operator has chosen the Qdrant store over this one.
+
+    Read from the global settings, not from the passed ``llm`` client: a caller
+    may hand in a stub whose ``settings`` only knows the embeddings model, and
+    the backend choice is a deployment setting, not a per-call one.  The default
+    is the SQLite store, so nothing dispatches away without an explicit opt-in.
+    """
+    return (get_settings().semantic_backend or "sqlite").strip().lower() == "qdrant"
 
 #: How much of a description to embed.  An embedding of the whole body buys
 #: little over the head of it and costs the same per token.
@@ -116,6 +128,10 @@ def backfill(
     batch: int = 64,
 ) -> dict[str, Any]:
     """Embed the entities that have no vector, or whose text has changed."""
+    if _use_qdrant():
+        from dreamjob.pipeline import semantic_qdrant
+
+        return semantic_qdrant.backfill(entity_type, llm=llm, limit=limit, batch=batch)
     builder = _TEXT_BUILDERS.get(entity_type)
     if builder is None:
         raise ValueError(f"No text builder for entity_type {entity_type!r}")
@@ -214,6 +230,12 @@ def similarities(
     with no stored vector is absent from the result, never scored zero.  Inert
     (an empty dict) without a model, and on any embedding failure.
     """
+    if _use_qdrant():
+        from dreamjob.pipeline import semantic_qdrant
+
+        return semantic_qdrant.similarities(
+            query, entity_ids, llm=llm, entity_type=entity_type
+        )
     wanted = {str(i) for i in entity_ids if i}
     if not query.strip() or not wanted:
         return {}
@@ -262,6 +284,10 @@ def _vectors_for(
 
 def stored_vector(entity_type: str, entity_id: str, model: str) -> list[float] | None:
     """One entity's stored vector for ``model``, or ``None`` when it has none."""
+    if _use_qdrant():
+        from dreamjob.pipeline import semantic_qdrant
+
+        return semantic_qdrant.stored_vector(entity_type, entity_id, model)
     found = _vectors_for(entity_type, model, [entity_id])
     return found[0][1] if found else None
 
