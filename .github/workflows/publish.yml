@@ -64,7 +64,7 @@ jobs:
       # plus the short commit SHA so any image traces back to its code.
       # The Docker Hub line renders empty (and is ignored) without the secret.
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: |
             ghcr.io/siegried81/${{ matrix.image }}
