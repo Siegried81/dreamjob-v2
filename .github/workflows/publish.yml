@@ -77,7 +77,7 @@ jobs:
 
       # Build once and load it locally, so the smoke test runs on the exact
       # image that gets pushed: never publish an image nobody has started.
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -112,7 +112,7 @@ jobs:
 
       # Push the real tags. Every layer is already in the cache, so this is an
       # upload, not a second build.
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}
