@@ -7,9 +7,9 @@ behaviour is pinned in ``test_semantic.py`` / ``test_semantic_consumed.py``).
 Everything here runs offline and without the ``qdrant-client`` package: a fake
 ``qdrant_client`` module is installed into ``sys.modules``, with an in-memory
 client whose ``query_points`` ranks by the same ``semantic.cosine`` the SQLite
-path uses - which is what lets the test assert that a ``similarity`` keeps its
-meaning across the two stores.  A stub embedder keeps the texts deterministic
-('data' points one way, everything else the other).
+path uses, so the test can check a similarity means the same thing in both
+stores.  A stub embedder keeps the texts deterministic ('data' points one way,
+everything else the other).
 """
 
 from __future__ import annotations
@@ -217,6 +217,29 @@ def test_backfill_indexes_and_skips_unchanged_text(db, fake_qdrant):
     assert semantic.backfill("vacancy", llm=_Stub())["indexed"] == 0
 
 
+class _OtherModel(_Stub):
+    """The same texts embedded by a different model (same dimension)."""
+
+    class settings:
+        embeddings_model = "other-model"
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        return [[0.0, 1.0] if "data" in t.lower() else [1.0, 0.0] for t in texts]
+
+
+def test_changing_the_model_re_embeds_everything(db, fake_qdrant):
+    # The SQLite path keys its content-hash skip by (entity_type, model), so a
+    # model switch re-embeds every row. The Qdrant path must do the same, or a
+    # switch leaves the old model's vectors in place and stored_vector() for the
+    # new model answers None for every row.
+    data_id = _vacancy("Data Engineer", "Build data pipelines")
+    assert semantic.backfill("vacancy", llm=_Stub())["indexed"] == 1
+
+    assert semantic.backfill("vacancy", llm=_OtherModel())["indexed"] == 1
+    assert semantic.stored_vector("vacancy", data_id, "other-model") == [0.0, 1.0]
+    assert semantic.stored_vector("vacancy", data_id, "stub-model") is None
+
+
 def test_similarities_restricts_to_candidates_and_keeps_cosine_meaning(db, fake_qdrant):
     data_id = _vacancy("Data Engineer", "Build data pipelines")
     sales_id = _vacancy("Account Executive", "Sell the product")
@@ -273,18 +296,29 @@ def test_stored_vector_round_trips_through_qdrant(db, fake_qdrant):
 
 
 def test_default_backend_never_touches_qdrant(tmp_path, monkeypatch):
-    # With the default sqlite backend, the dispatch must not reach this module.
+    # With the default sqlite backend, the dispatch must not reach this module:
+    # the calls below go through semantic.* and would hit _fail if it did.
+    path = tmp_path / "semantic.db"
     monkeypatch.setenv("DREAMJOB_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("DREAMJOB_DB_PATH", str(tmp_path / "semantic.db"))
+    monkeypatch.setenv("DREAMJOB_DB_PATH", str(path))
     monkeypatch.delenv("DREAMJOB_SEMANTIC_BACKEND", raising=False)
     get_settings.cache_clear()
+    migrate(path)
+    real = conn_mod.get_connection
+    monkeypatch.setattr(conn_mod, "get_connection", lambda db_path=None: real(path))
 
-    def _fail(*args, **kwargs):  # pragma: no cover - asserts it is not called
+    def _fail(*args, **kwargs):
         raise AssertionError("the sqlite backend must not call semantic_qdrant")
 
     monkeypatch.setattr(semantic_qdrant, "similarities", _fail)
     monkeypatch.setattr(semantic_qdrant, "backfill", _fail)
+    monkeypatch.setattr(semantic_qdrant, "stored_vector", _fail)
     assert semantic._use_qdrant() is False
+
+    data_id = _vacancy("Data Engineer", "Build data pipelines")
+    assert semantic.backfill("vacancy", llm=_Stub())["indexed"] == 1
+    assert semantic.similarities("data", [data_id], llm=_Stub())[data_id] == pytest.approx(1.0)
+    assert semantic.stored_vector("vacancy", data_id, "stub-model") == [1.0, 0.0]
     get_settings.cache_clear()
 
 

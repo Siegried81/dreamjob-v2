@@ -514,7 +514,8 @@ Feedback re-tunes that job seeker's weights and suggests directive refinements
 
 A **semantic index** (FR-341) stores one content-hash-keyed embedding per
 company and vacancy and can answer nearest-neighbour queries with pure-Python
-cosine. `GET /api/opportunities/semantic?q=` ranks the job seeker's own
+cosine, or, with `DREAMJOB_SEMANTIC_BACKEND=qdrant`, in a Qdrant collection
+with the same cosine. `GET /api/opportunities/semantic?q=` ranks the job seeker's own
 opportunities by similarity of their vacancy to the query - another seeker's
 rows are never candidates, and without a model the answer is an empty list that
 says why. Scoring consults the index only when `DREAMJOB_SEMANTIC_SCORING` is

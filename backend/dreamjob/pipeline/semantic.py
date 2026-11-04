@@ -4,7 +4,9 @@ Keyword search cannot answer "which postings are like this one": FTS5 matches
 terms, and the dream-fit comparison spends a model call per record.  With an
 embeddings model configured, this stores one vector per entity and answers
 nearest-neighbour queries in pure Python - no numerical dependency, and no
-behaviour on an installation that has not chosen a model.
+behaviour on an installation that has not chosen a model.  With
+``DREAMJOB_SEMANTIC_BACKEND=qdrant`` the same calls go to
+:mod:`semantic_qdrant` instead.
 
 The vectors are an *index*, not a source of truth: rebuilding is always safe,
 and search degrades to an empty list rather than an error when the index or the

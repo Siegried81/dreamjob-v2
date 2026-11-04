@@ -84,16 +84,10 @@ class Settings(BaseSettings):
     # it on changes what a score means, so it is an explicit operator choice.
     semantic_scoring: bool = Field(False, alias="DREAMJOB_SEMANTIC_SCORING")
 
-    # Where the semantic index keeps its vectors.  "sqlite" (default) stores
-    # them in the embedding table and ranks them in pure Python - no extra
-    # service, works on the SQLite the product already ships.  "qdrant"
-    # offloads the vectors to a Qdrant server (pipeline.semantic_qdrant) and
-    # lets it rank them.  The two are interchangeable: both read the same
-    # embeddings model and both return cosine similarities with the same
-    # meaning, so switching the backend does not change what a `similarity`
-    # number is.  The default stays "sqlite" so no existing installation
-    # changes behaviour, and the qdrant-client package is only needed when the
-    # flag names "qdrant".
+    # Where the semantic index keeps its vectors.  "sqlite" (default) uses the
+    # embedding table and ranks in Python.  "qdrant" sends them to a Qdrant
+    # server (pipeline.semantic_qdrant).  Both return the same cosine
+    # similarity.  qdrant-client is only needed for "qdrant".
     semantic_backend: str = Field("sqlite", alias="DREAMJOB_SEMANTIC_BACKEND")
     qdrant_url: str = Field("http://localhost:6333", alias="DREAMJOB_QDRANT_URL")
     # One Qdrant collection per entity_type, named "<prefix>_<entity_type>".
@@ -263,9 +257,7 @@ class Settings(BaseSettings):
     @field_validator("semantic_backend", mode="before")
     @classmethod
     def _normalise_semantic_backend(cls, v: object) -> object:
-        # A typo here would silently fall back to one store or the other, which
-        # is exactly the kind of quiet wrong behaviour this project refuses, so
-        # an unknown value is a loud configuration error on boot.
+        # A typo must not quietly pick a store.  An unknown value fails at boot.
         if v is None or v == "":
             return "sqlite"
         value = str(v).strip().lower()
