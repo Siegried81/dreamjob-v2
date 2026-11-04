@@ -221,3 +221,26 @@ were such, and the writer already treated each as one posting.
 
 **What would reverse it.** Dropping the unique index brings back a plain one; the
 rows deleted by migration 160 are only in a backup taken before it ran.
+
+## 2026-11-04 — the semantic index can live in Qdrant, off by default
+
+**What.** `DREAMJOB_SEMANTIC_BACKEND=qdrant` sends the vectors to a Qdrant
+server (`pipeline/semantic_qdrant.py`) instead of the `embedding` table. The
+default stays `sqlite`; nothing changes for an installation that doesn't set
+the flag. `qdrant-client` is an optional dependency (`pip install -e .[qdrant]`).
+
+**Why.** The SQLite store ranks every candidate in Python. That's fine at the
+size this product runs at, and it stays the reference. Qdrant is there for a
+deployment that already runs one, or that wants the index outside the process.
+
+**What a number means.** Nothing moved. The collection uses `Distance.COSINE`,
+so the similarity is the same cosine in -1..1 as `semantic.cosine`, rounded to
+4 places. The content-hash skip is keyed by model on both paths, so a model
+switch re-embeds everything (a first version of the Qdrant path ignored the
+model and kept stale vectors; `test_changing_the_model_re_embeds_everything`
+pins the fix). One collection holds one model: switching to a model with a
+different dimension means dropping the collection first.
+
+**Revisit if** the collection name should carry the model (or its dimension)
+so two models can coexist, or if `semantic.search` ever gets a caller and needs
+the same dispatch.

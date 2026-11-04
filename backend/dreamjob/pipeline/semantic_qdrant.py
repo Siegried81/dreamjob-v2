@@ -1,26 +1,26 @@
 """A Qdrant-backed semantic index (FR-261, FR-282).
 
-The additive alternative to the pure-Python store in :mod:`semantic`.  It is
-reached only through the dispatch in that module, and only when
-``DREAMJOB_SEMANTIC_BACKEND`` is set to ``qdrant`` - the SQLite path stays the
-default and is untouched.  Everything else is the same: the same embeddings
-model, the same content-hash skip so unchanged text is not re-embedded, the
-same "no model / empty index returns an empty result with a note, not an error"
-behaviour.
+The alternative to the pure-Python store in :mod:`semantic`. It is reached only
+through the dispatch in that module, and only when ``DREAMJOB_SEMANTIC_BACKEND``
+is ``qdrant``. The SQLite path stays the default and isn't touched. ``backfill``,
+``similarities`` and ``stored_vector`` are dispatched; ``search`` isn't, and
+nothing in the app calls it.
 
-**The similarity keeps its meaning.**  The collection is created with
-``Distance.COSINE``, so the score Qdrant returns for ``query_points`` *is* the
-cosine similarity in ``-1..1`` - the identical quantity :func:`semantic.cosine`
-computes for the SQLite path - and it is rounded to four places the same way.
-Switching the backend therefore does not change what a ``similarity`` number
-means; the two stores are interchangeable.
+Same contract as the SQLite path: the same embeddings model, the same
+content-hash skip keyed by model (a model switch re-embeds everything), and the
+same "no model or empty index gives an empty result, not an error".
 
-``qdrant-client`` is imported lazily inside the functions that need it, so the
-package is a genuine optional dependency: an installation left on the default
-SQLite backend never has to install it.  The embedding dimension is never
-hardcoded - a collection is created with the size of the first vector the
-configured endpoint actually returns, exactly as the SQLite path stores each
-row's ``dim`` from the runtime vector.
+The collection uses ``Distance.COSINE``, so Qdrant's score is the cosine
+similarity in ``-1..1``, the same number :func:`semantic.cosine` gives on the
+SQLite path, rounded to 4 places the same way. A similarity means the same thing
+under both backends.
+
+``qdrant-client`` is imported lazily, so an installation left on SQLite never
+has to install it. The dimension isn't hardcoded: the collection takes the size
+of the first vector the model returns, the way the SQLite path stores each row's
+``dim``. One collection holds one model's vectors. Switching to a model with a
+different dimension needs the collection dropped first; Qdrant refuses the
+upsert otherwise.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ def _require_qdrant():
     try:
         import qdrant_client  # noqa: PLC0415 - deliberately lazy, see docstring
         from qdrant_client import models  # noqa: PLC0415
-    except ImportError as exc:  # pragma: no cover - exercised via the mock in tests
+    except ImportError as exc:  # the test runs this for real: the package isn't in the venv
         raise RuntimeError(_INSTALL_HINT) from exc
     return qdrant_client, models
 
@@ -92,8 +92,8 @@ def _collection_exists(client, name: str) -> bool:
 def _ensure_collection(qdrant_models, client, name: str, dim: int) -> None:
     """Create the collection with the real runtime dimension if it is absent.
 
-    COSINE distance is what makes the query score a cosine similarity, which is
-    the whole point of keeping the measurement identical to the SQLite path.
+    COSINE is what makes the query score a cosine similarity, same as the
+    SQLite path.
     """
     if _collection_exists(client, name):
         return
@@ -105,12 +105,14 @@ def _ensure_collection(qdrant_models, client, name: str, dim: int) -> None:
     )
 
 
-def _known_hashes(client, name: str, entity_ids: list[str]) -> dict[str, str]:
-    """``{entity_id: content_hash}`` already stored, for the content-hash skip.
+def _known_hashes(client, name: str, entity_ids: list[str], model: str) -> dict[str, str]:
+    """``{entity_id: content_hash}`` already stored by ``model``, for the skip.
 
     Empty when the collection does not exist yet (the first backfill), so the
-    first run embeds everything and later runs skip unchanged text - the same
-    contract as the SQLite path.
+    first run embeds everything and later runs skip unchanged text. A hash
+    written by another model doesn't count, so a model switch re-embeds every
+    row. That is what the SQLite path does with its
+    ``WHERE entity_type = ? AND model = ?``.
     """
     if not entity_ids or not _collection_exists(client, name):
         return {}
@@ -131,7 +133,7 @@ def _known_hashes(client, name: str, entity_ids: list[str]) -> dict[str, str]:
             payload = point.payload or {}
             eid = payload.get("entity_id")
             digest = payload.get("content_hash")
-            if eid is not None and digest is not None:
+            if eid is not None and digest is not None and str(payload.get("model")) == model:
                 known[str(eid)] = str(digest)
     return known
 
@@ -174,7 +176,7 @@ def backfill(
             continue
         candidates.append((row["id"], text, semantic._content_hash(text)))
 
-    known = _known_hashes(client, name, [eid for eid, _, _ in candidates])
+    known = _known_hashes(client, name, [eid for eid, _, _ in candidates], model)
     pending = [c for c in candidates if known.get(c[0]) != c[2]]
 
     indexed = 0
@@ -222,8 +224,8 @@ def similarities(
     no stored vector is simply absent from the result, never scored zero.  Inert
     (an empty dict) without a model, and on any embedding or query failure.
 
-    The returned number is Qdrant's COSINE score - the same cosine similarity,
-    in ``-1..1``, that the SQLite path returns - rounded to four places.
+    The number is Qdrant's COSINE score, the same cosine similarity in ``-1..1``
+    the SQLite path returns, rounded to 4 places.
     """
     wanted = [str(i) for i in entity_ids if i]
     if not query.strip() or not wanted:
@@ -283,9 +285,12 @@ def stored_vector(entity_type: str, entity_id: str, model: str) -> list[float] |
     """One entity's stored vector for ``model``, or ``None`` when it has none.
 
     The Qdrant counterpart of :func:`semantic.stored_vector`, read by the opt-in
-    scoring term so the dream-fit sub-score works under either backend.  The
+    scoring term so the dream-fit sub-score works under either backend. The
     payload ``model`` is checked so a vector embedded with a different model is
-    not mistaken for this one.
+    not mistaken for this one. Qdrant stores a COSINE collection's vectors
+    normalised, so this returns a unit vector where SQLite returns the raw
+    embedding; the only reader feeds it to ``semantic.cosine``, which doesn't
+    care about scale.
     """
     qdrant_client, _qdrant_models = _require_qdrant()
     settings = get_settings()

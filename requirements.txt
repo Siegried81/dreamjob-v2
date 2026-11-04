@@ -53,7 +53,6 @@ tzdata>=2026.5
 # Only needed when DREAMJOB_SEMANTIC_BACKEND=qdrant.  The default "sqlite"
 # backend keeps the vectors in the embedding table and needs nothing extra, so
 # this line is left commented: uncomment it (or `pip install qdrant-client`) on
-# a deployment that chooses Qdrant.  The code imports it lazily and prints an
-# install hint if it is missing, so a forgotten install fails loudly, not
-# silently.  Also exposed as the `qdrant` extra in pyproject.toml.
+# a deployment that chooses Qdrant.  The code imports it lazily and raises a
+# clear hint if it's missing.  Also the `qdrant` extra in pyproject.toml.
 # qdrant-client>=1.12.0

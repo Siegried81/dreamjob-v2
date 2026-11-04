@@ -398,7 +398,7 @@ templates and `help/content.js`.
 ```bash
 python3 scripts/bootstrap.py                 # schema + first administrator
 python3 scripts/traceability.py              # requirement-to-file matrix
-python3 scripts/build_semantic_index.py      # backfill the embedding table
+python3 scripts/build_semantic_index.py      # build the semantic index (SQLite table, or Qdrant with DREAMJOB_SEMANTIC_BACKEND=qdrant)
 
 # Widen the company inventory (run by hand):
 python3 scripts/import_board_registry.py     # public ATS boards, monthly
