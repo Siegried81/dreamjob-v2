@@ -47,7 +47,7 @@ ruff==0.17.3  # pinned: CI installs whatever this resolves to, and a new ruff re
 # this package ZoneInfo("Europe/Brussels") raises ZoneInfoNotFoundError, which
 # took 50 tests down on a fresh Windows clone (mail dispatch windows, post-app
 # monitoring, the apply browser). The old clone had it only transitively.
-tzdata>=2026.5
+tzdata>=2026.6
 
 # --- Optional: Qdrant semantic backend -------------------------------------
 # Only needed when DREAMJOB_SEMANTIC_BACKEND=qdrant.  The default "sqlite"
