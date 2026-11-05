@@ -1,10 +1,13 @@
-# Dependency version updates: monthly, one grouped PR per ecosystem for minor
-# and patch releases, so a library release does not turn into a PR of its own.
-# Major releases stay out of the group and arrive as one PR each: a breaking
-# major hidden in a 25-package bump is how selectolax 1.0 removed an API this
-# code imported, and a PR of its own names the package that broke. Security updates are
-# enabled in the repository settings and arrive as soon as an advisory does,
-# independently of this schedule.
+# Dependency version updates, monthly. Each ecosystem gets two grouped PRs at
+# most: one for minor and patch releases, one for major releases. Majors stay
+# in a PR of their own because a breaking major hidden in a 25-package bump is
+# how selectolax 1.0 removed an API this code imported; a short majors-only PR
+# keeps the list of suspects small without opening one PR per package.
+# GitHub Actions are the exception: their majors rarely touch application code,
+# so every action update lands in a single PR.
+# While a group PR is open, Dependabot rebases it with newer releases instead
+# of opening another one. Security updates are enabled in the repository
+# settings and arrive as soon as an advisory does, independently of this schedule.
 version: 2
 updates:
   - package-ecosystem: pip
@@ -15,6 +18,9 @@ updates:
       python-deps:
         patterns: ["*"]
         update-types: [minor, patch]
+      python-majors:
+        patterns: ["*"]
+        update-types: [major]
 
   - package-ecosystem: npm
     directory: /frontend
@@ -24,6 +30,9 @@ updates:
       frontend-deps:
         patterns: ["*"]
         update-types: [minor, patch]
+      frontend-majors:
+        patterns: ["*"]
+        update-types: [major]
 
   - package-ecosystem: github-actions
     directory: /
@@ -32,4 +41,3 @@ updates:
     groups:
       actions:
         patterns: ["*"]
-        update-types: [minor, patch]
