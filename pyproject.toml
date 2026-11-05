@@ -42,5 +42,12 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+# W catches trailing whitespace and a missing final newline: invisible edits
+# that otherwise show up as noise in pull request diffs.
+select = ["E", "F", "I", "UP", "B", "W"]
 ignore = ["E501", "B008"]
+
+[tool.ruff.format]
+# Default "auto" keeps whatever ending a file already has; force LF so a file
+# saved on Windows comes out the same as one saved on macOS or Linux.
+line-ending = "lf"

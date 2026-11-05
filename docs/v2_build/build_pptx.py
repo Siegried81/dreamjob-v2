@@ -457,7 +457,7 @@ footer(sl, N)
 # ===========================================================================
 # START HERE and WHERE I AM
 # ===========================================================================
-screen_slide("PART 1 · START HERE", "Start here", 
+screen_slide("PART 1 · START HERE", "Start here",
     "Three steps and nothing else: set up your profile, let Dream Job search and rank "
     "the market, then choose who to write to. Everything in between runs on its own.",
     ["The whole search runs in the background; the page can be closed.",
