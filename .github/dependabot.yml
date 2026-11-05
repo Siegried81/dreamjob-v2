@@ -14,6 +14,12 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    # requirements.txt pins floors (`>=`). With the default strategy the
+    # grouped run sees every floor as already satisfied and reports "Nothing
+    # to update", then the per-package run raises each floor anyway, one PR
+    # per package. "increase" makes both runs raise the floor, so the bumps
+    # land in the groups below.
+    versioning-strategy: increase
     groups:
       python-deps:
         patterns: ["*"]
