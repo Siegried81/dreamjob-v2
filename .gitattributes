@@ -1,5 +1,12 @@
+# Every text file is stored with LF in the repo, whatever the contributor's OS.
+# Without this, a Windows commit can rewrite every line ending of a file and the
+# pull request shows the whole file as changed, which also breeds merge
+# conflicts. It also keeps shell scripts runnable inside the Linux container.
+* text=auto eol=lf
+
 # Test fixtures are compared byte for byte against their manifest, so git must
 # never rewrite their line endings on checkout: with core.autocrlf=true a Windows
 # clone turned a 902-line HTML capture into 902 extra bytes and failed
 # tests/unit/test_employer_website_rung.py::test_captured_pages_match_their_manifest.
+# This rule must stay below the one above: the later match wins.
 tests/fixtures/** -text
