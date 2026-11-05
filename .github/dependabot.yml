@@ -3,8 +3,10 @@
 # in a PR of their own because a breaking major hidden in a 25-package bump is
 # how selectolax 1.0 removed an API this code imported; a short majors-only PR
 # keeps the list of suspects small without opening one PR per package.
-# GitHub Actions are the exception: their majors rarely touch application code,
-# so every action update lands in a single PR.
+# Two exceptions get a single PR. GitHub Actions, because their majors rarely
+# touch application code. pip, because its floors (`>=`) leave Dependabot unable
+# to tell a major from a patch (see the note on that entry); a selectolax-style
+# break there has to be found by CI on the one grouped PR.
 # While a group PR is open, Dependabot rebases it with newer releases instead
 # of opening another one. Security updates are enabled in the repository
 # settings and arrive as soon as an advisory does, independently of this schedule.
@@ -14,19 +16,15 @@ updates:
     directory: /
     schedule:
       interval: monthly
-    # requirements.txt pins floors (`>=`). With the default strategy the
-    # grouped run sees every floor as already satisfied and reports "Nothing
-    # to update", then the per-package run raises each floor anyway, one PR
-    # per package. "increase" makes both runs raise the floor, so the bumps
-    # land in the groups below.
-    versioning-strategy: increase
+    # One group with no update-types filter. requirements.txt pins floors
+    # (`>=`), so Dependabot has no current version to compare against (its
+    # log says "Updating pydantic from  to 2.14.2") and cannot tell a major
+    # from a patch. A group filtered on update-types then matches nothing,
+    # reports "Nothing to update", and every bump falls back to a PR of its
+    # own. Without the filter, all of them land in this one PR.
     groups:
       python-deps:
         patterns: ["*"]
-        update-types: [minor, patch]
-      python-majors:
-        patterns: ["*"]
-        update-types: [major]
 
   - package-ecosystem: npm
     directory: /frontend
