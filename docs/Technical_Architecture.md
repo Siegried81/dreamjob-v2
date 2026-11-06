@@ -67,9 +67,9 @@ of taking those constraints seriously rather than working around them.
    (or local)     ATS / sites     NBB, KBO…     Resend · M365 (read)
 ```
 
-**Scale** (re-derived 2026-10-14; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
-`tests/**/*.py`). 245 Python modules / 128,409 lines · 147 JS modules /
-45,056 lines · 142 test files / 69,657 lines · 46 migrations · 24 versioned
+**Scale** (re-derived 2026-11-06; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
+`tests/**/*.py`). 246 Python modules / 128,803 lines · 147 JS modules /
+45,056 lines · 143 test files / 70,055 lines · 46 migrations · 24 versioned
 prompt templates · 36 declared source adapters, 30 of them enabled. The
 offline pass count is in `README.md`, which is where it is re-derived.
 
@@ -404,9 +404,9 @@ profiled as if it were the client.
 
 ## 9. Testing
 
-**2,490 tests collected, 69,657 lines across 142 files** (`tests/**/*.py`,
-re-counted 2026-10-14; `-m 'not llm and not load'` deselects 14, leaving 2,452,
-of which the CI command's `tests/unit tests/integration` runs 2,442.
+**2,502 tests collected, 70,055 lines across 143 files** (`tests/**/*.py`,
+re-counted 2026-11-06; `-m 'not llm and not load'` deselects 14, leaving 2,488,
+of which the CI command's `tests/unit tests/integration` runs 2,454.
 The offline pass count is in `README.md`, which is where it is re-derived).
 Each runs against a migrated temporary database and without network access; LLM
 and HTTP paths are stubbed or skipped, and the network and load tests are
