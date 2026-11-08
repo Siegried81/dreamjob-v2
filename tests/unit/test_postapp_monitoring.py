@@ -818,6 +818,55 @@ def test_an_empty_digest_says_so() -> None:
     assert "Nothing new this week" in digest.render_text(built)
 
 
+def test_digest_counts_are_totals_not_the_fetched_page() -> None:
+    """A section's count is every row in the period, not the rows fetched to show.
+
+    The digest fetches a short list per section to display.  The count beside
+    each heading, the history table and the "... and N more" line must still
+    say how many there were, or a week with 40 new opportunities reads as 24.
+    """
+    from dreamjob.db.connection import insert_row, utcnow
+    from dreamjob.monitoring import digest
+
+    data = seed()
+    for i in range(40):
+        insert_row(
+            "opportunity",
+            {
+                "job_seeker_id": data["seeker_id"],
+                "campaign_id": data["campaign_id"],
+                "kind": "vacancy",
+                "title": f"Data Engineer {i}",
+                "score": 50.0,
+                "user_status": "new",
+                "created_at": utcnow(),
+                "updated_at": utcnow(),
+            },
+        )
+    for i in range(30):
+        insert_row(
+            "reply_draft",
+            {
+                "job_seeker_id": data["seeker_id"],
+                "subject": f"Re: application {i}",
+                "body": "Thank you.",
+                "status": "draft",
+                "created_at": utcnow(),
+                "updated_at": utcnow(),
+            },
+        )
+
+    built = digest.build(data["seeker_id"])
+    # The seeded opportunity is "applied", not "not_interested", so it counts.
+    assert built.counts["new_opportunities"] == 41
+    assert built.counts["drafts_waiting"] == 30
+    assert len(built.sections["new_opportunities"]) == digest.SECTION_LIMIT
+    text = digest.render_text(built)
+    assert "NEW OPPORTUNITIES (41)" in text
+    assert f"... and {41 - digest.SECTION_LIMIT} more" in text
+    assert built.action is not None and "30 drafted replies" in built.action.reason
+
+
 # ---------------------------------------------------------------------------
 # The scheduler
 # ---------------------------------------------------------------------------

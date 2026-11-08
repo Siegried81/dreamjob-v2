@@ -244,3 +244,47 @@ different dimension means dropping the collection first.
 **Revisit if** the collection name should carry the model (or its dimension)
 so two models can coexist, or if `semantic.search` ever gets a caller and needs
 the same dispatch.
+
+## 2026-11-08: digest counts are totals, not the length of the fetched page
+
+**What changed.** `monitoring/digest.py:build` read each section's count as
+`len()` of a list fetched with `LIMIT 24` (`SECTION_LIMIT * 3`). The counts now
+come from `pipeline_cards.digest_counts`, one `COUNT(*)` per section over the
+same FROM and WHERE as the list query. The "N drafted replies are waiting"
+sentence in the recommended action reads the same total.
+
+**What it means for the numbers.** `digest.counts` (stored with every digest
+and shown in the digest history table), the `HEADING (N)` line and the
+"... and N more" line used to stop at 24. A week with 41 new opportunities read
+"NEW OPPORTUNITIES (24)" and "... and 16 more"; it now reads 41 and 33. Digests
+already stored keep their old counts. `stage_changes` and
+`silent_applications` were never capped and are unchanged.
+
+## 2026-11-08: the knowledge-base half of the synthesis pool is not capped
+
+**What changed.** `opportunities.vacancies_for_companies`, the FR-342 reuse
+path that `campaign_vacancy_pool` merges with the campaign's own vacancies, kept
+the newest 5,000 rows. It now returns all of them, binding the company ids 500
+at a time, still newest first.
+
+**What it means for the numbers.** A repeat campaign over companies with more
+than 5,000 recent vacancies in the knowledge base synthesised from at most
+5,000 of them, and `SynthesisReport.dropped_over_cap` never counted the rest.
+Measured on a test pool of 5,200: 5,000 before, 5,200 after. The campaign's own
+`max_opportunities` cap still applies after this, and is still reported. A
+campaign that touched more than 32,766 companies used to fail this query on
+SQLite's variable limit; it now reads them in chunks.
+
+## 2026-11-08: learned scoring weights stay inside their band
+
+**What changed.** `scoring.learn_weights` clamped each proposed weight to
+0.3x..2.5x its default and then normalised the total, which moved the weights
+out of the band again. It now uses `normalise_within_band`, which pins a weight
+that leaves its band to the edge and rescales only the others.
+
+**What it means for the numbers.** Feedback where only `profile_fit` separates
+kept from rejected rows took it to 2.86x its default after five learning rounds
+(and up to 3.19x, a weight of 0.70, at the extreme). It now stops at 2.5x
+(0.55). Weights already saved keep their values until the next learning run.
+The weights a seeker sets by hand and the FR-425 outcome nudge in
+`postapp/outcomes.py` do not go through this path and are unchanged.

@@ -118,7 +118,7 @@ backend/dreamjob
   pipeline              intake · enrichment · planning · collection · profiling
                         · domains · employer kind · financial · opportunities ·
                         scoring · contacts · generation · autopilot
-  adapters              30 source adapters over one four-step contract
+  adapters              36 source adapters over one four-step contract
   documents             CV, briefing, motivation and email generation
   mail                  Gmail OAuth, IMAP and Resend behind one interface; read-only Microsoft 365 inbox
   postapp               pipeline board, replies, learning, mock interviews
