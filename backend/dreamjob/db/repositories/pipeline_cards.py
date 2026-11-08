@@ -1051,15 +1051,42 @@ def active_seeker_ids(since: str) -> list[str]:
     return list(ids)
 
 
+#: The rows each digest section is drawn from.  The list functions below and
+#: :func:`digest_counts` share these, so the count beside a heading and the
+#: items under it can never be read from two different sets of rows.
+_NEW_OPPORTUNITIES_FROM = """
+        FROM opportunity o LEFT JOIN company c ON c.id = o.company_id
+        WHERE o.job_seeker_id = ? AND o.created_at >= ? AND o.user_status <> 'not_interested'
+"""
+_WATCH_CHANGES_FROM = (
+    " FROM notification "
+    "WHERE job_seeker_id = ? AND created_at >= ? AND kind IN ('new_vacancy', 'signal') "
+)
+_DUE_FOLLOW_UPS_FROM = """
+        FROM dispatch d
+        JOIN application_package p ON p.id = d.application_package_id
+        LEFT JOIN opportunity o ON o.id = p.opportunity_id
+        LEFT JOIN company c ON c.id = o.company_id
+        LEFT JOIN pipeline_card k ON k.application_package_id = p.id
+        WHERE d.job_seeker_id = ? AND d.follow_up_due_at IS NOT NULL
+          AND d.follow_up_due_at <= ? AND d.follow_up_sent_at IS NULL
+          AND COALESCE(k.stage, 'sent') IN ('sent', 'replied')
+"""
+_REPLIES_SINCE_FROM = (
+    " FROM incoming_reply r "
+    "WHERE r.job_seeker_id = ? AND COALESCE(r.received_at, r.created_at) >= ?"
+)
+_DRAFTS_WITH_STATUS_FROM = " FROM reply_draft WHERE job_seeker_id = ? AND status = ?"
+
+
 def new_opportunities(job_seeker_id: str, since: str, limit: int = 25) -> list[dict]:
     return query_all(
         """
         SELECT o.id, o.title, o.kind, o.score, o.timing_flag, o.created_at, o.campaign_id,
                c.name AS company_name
-        FROM opportunity o LEFT JOIN company c ON c.id = o.company_id
-        WHERE o.job_seeker_id = ? AND o.created_at >= ? AND o.user_status <> 'not_interested'
-        ORDER BY o.score DESC NULLS LAST, o.created_at DESC LIMIT ?
-        """,
+        """
+        + _NEW_OPPORTUNITIES_FROM
+        + " ORDER BY o.score DESC NULLS LAST, o.created_at DESC LIMIT ?",
         (job_seeker_id, since, int(limit)),
     )
 
@@ -1067,9 +1094,9 @@ def new_opportunities(job_seeker_id: str, since: str, limit: int = 25) -> list[d
 def watch_changes(job_seeker_id: str, since: str, limit: int = 50) -> list[dict]:
     """Notifications the watchlist raised in the period (FR-403)."""
     return query_all(
-        "SELECT id, kind, title, body, payload, created_at FROM notification "
-        "WHERE job_seeker_id = ? AND created_at >= ? AND kind IN ('new_vacancy', 'signal') "
-        "ORDER BY created_at DESC LIMIT ?",
+        "SELECT id, kind, title, body, payload, created_at"
+        + _WATCH_CHANGES_FROM
+        + "ORDER BY created_at DESC LIMIT ?",
         (job_seeker_id, since, int(limit)),
     )
 
@@ -1081,18 +1108,36 @@ def due_follow_ups(job_seeker_id: str, before: str, limit: int = 50) -> list[dic
         SELECT d.id AS dispatch_id, d.recipient_email, d.subject, d.follow_up_due_at,
                d.sent_at, p.opportunity_id, o.title AS opportunity_title,
                c.name AS company_name, k.id AS pipeline_card_id, k.stage
-        FROM dispatch d
-        JOIN application_package p ON p.id = d.application_package_id
-        LEFT JOIN opportunity o ON o.id = p.opportunity_id
-        LEFT JOIN company c ON c.id = o.company_id
-        LEFT JOIN pipeline_card k ON k.application_package_id = p.id
-        WHERE d.job_seeker_id = ? AND d.follow_up_due_at IS NOT NULL
-          AND d.follow_up_due_at <= ? AND d.follow_up_sent_at IS NULL
-          AND COALESCE(k.stage, 'sent') IN ('sent', 'replied')
-        ORDER BY d.follow_up_due_at ASC LIMIT ?
-        """,
+        """
+        + _DUE_FOLLOW_UPS_FROM
+        + " ORDER BY d.follow_up_due_at ASC LIMIT ?",
         (job_seeker_id, before, int(limit)),
     )
+
+
+def digest_counts(job_seeker_id: str, since: str, before: str) -> dict[str, int]:
+    """How many rows each digest section holds in the period, uncapped (FR-403).
+
+    The digest fetches only a short page of each section to display, so the
+    length of that page is not the total.  Counted over the same FROM and WHERE
+    as the list functions, in one statement.
+    """
+    row = query_one(
+        "SELECT "
+        f"(SELECT COUNT(*){_NEW_OPPORTUNITIES_FROM}) AS new_opportunities, "
+        f"(SELECT COUNT(*){_REPLIES_SINCE_FROM}) AS replies, "
+        f"(SELECT COUNT(*){_DUE_FOLLOW_UPS_FROM}) AS follow_ups_due, "
+        f"(SELECT COUNT(*){_WATCH_CHANGES_FROM}) AS watchlist_changes, "
+        f"(SELECT COUNT(*){_DRAFTS_WITH_STATUS_FROM}) AS drafts_waiting",
+        (
+            job_seeker_id, since,
+            job_seeker_id, since,
+            job_seeker_id, before,
+            job_seeker_id, since,
+            job_seeker_id, "draft",
+        ),
+    ) or {}
+    return {key: int(value or 0) for key, value in row.items()}
 
 
 def seeker(job_seeker_id: str) -> dict | None:

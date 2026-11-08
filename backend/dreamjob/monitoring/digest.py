@@ -94,14 +94,21 @@ class Digest:
 # ---------------------------------------------------------------------------
 
 
-def choose_action(sections: dict[str, Any]) -> Action | None:
+def choose_action(
+    sections: dict[str, Any], counts: dict[str, int] | None = None
+) -> Action | None:
     """The one thing to do next, and why it beat everything else.
 
     Ordered by what is lost by not doing it: an unanswered invitation can
     expire, an overdue follow-up decays with every day, an offer without a
     negotiation brief is a conversation entered unprepared, and a new
     opportunity is simply available.
+
+    ``counts`` are the section totals.  The lists in ``sections`` are a
+    fetched page, so a sentence that says "how many" reads the total when
+    one is given.
     """
+    counts = counts or {}
     invitations = [
         r for r in sections.get("replies", [])
         if r.get("classification") == "interview_invitation" and not r.get("handled")
@@ -127,11 +134,12 @@ def choose_action(sections: dict[str, Any]) -> Action | None:
     drafts = sections.get("drafts_waiting", [])
     if drafts:
         draft = drafts[0]
+        waiting = max(len(drafts), int(counts.get("drafts_waiting") or 0))
         return Action(
             key="review_reply_draft",
             title="Review and send the drafted reply",
             reason=(
-                f"{len(drafts)} drafted repl{'y is' if len(drafts) == 1 else 'ies are'} "
+                f"{waiting} drafted repl{'y is' if waiting == 1 else 'ies are'} "
                 "waiting for you; nothing is sent until you approve it."
             ),
             entity_type="reply_draft",
@@ -283,16 +291,14 @@ def build(
         "silent_applications": silent[:SECTION_LIMIT],
         "pipeline": board_mod.summary(job_seeker_id),
     }
+    # The five fetches above stop at SECTION_LIMIT * 3 rows, so their lengths
+    # are not totals: the counts are read with a COUNT over the same rows.
     digest.counts = {
-        "new_opportunities": len(opportunities),
-        "replies": len(replies),
-        "follow_ups_due": len(follow_ups),
-        "watchlist_changes": len(changes),
-        "drafts_waiting": len(drafts),
+        **repo.digest_counts(job_seeker_id, start, finish),
         "stage_changes": len(stage_changes),
         "silent_applications": len(silent),
     }
-    # The ladder reads the full lists, not the truncated ones.
+    # The ladder reads the fetched lists, not the slices shown above.
     digest.action = choose_action(
         {
             "replies": [_slim_reply(r) for r in replies],
@@ -302,7 +308,8 @@ def build(
             "silent_applications": silent,
             "new_opportunities": opportunities,
             "watchlist_changes": changes,
-        }
+        },
+        digest.counts,
     )
     return digest
 

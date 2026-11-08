@@ -853,17 +853,27 @@ def watchlist_company_ids(job_seeker_id: str) -> list[str]:
 
 
 def vacancies_for_companies(company_ids: list[str], since: str | None = None) -> list[dict]:
-    """Knowledge-base vacancies of known companies - the reuse path (FR-342)."""
-    if not company_ids:
-        return []
-    marks = ", ".join("?" for _ in company_ids)
-    sql = f"SELECT * FROM vacancy WHERE company_id IN ({marks})"
-    params: list[Any] = list(company_ids)
-    if since:
-        sql += " AND COALESCE(posted_at, collected_at) >= ?"
-        params.append(since)
-    sql += " ORDER BY COALESCE(posted_at, collected_at) DESC LIMIT 5000"
-    return query_all(sql, tuple(params))
+    """Knowledge-base vacancies of known companies - the reuse path (FR-342).
+
+    Every one of them, newest first, for the same reason as
+    :func:`campaign_vacancies`: this is half of the pool synthesis ranks, and
+    a cap here drops rows before the campaign's own cap can report them.  The
+    ids are bound 500 at a time because a campaign can touch more companies
+    than SQLite lets one statement bind.
+    """
+    ids = list(dict.fromkeys(i for i in company_ids if i))
+    rows: list[dict] = []
+    for start in range(0, len(ids), 500):
+        chunk = ids[start : start + 500]
+        marks = ", ".join("?" for _ in chunk)
+        sql = f"SELECT * FROM vacancy WHERE company_id IN ({marks})"
+        params: list[Any] = list(chunk)
+        if since:
+            sql += " AND COALESCE(posted_at, collected_at) >= ?"
+            params.append(since)
+        rows.extend(query_all(sql, tuple(params)))
+    rows.sort(key=lambda r: r.get("posted_at") or r.get("collected_at") or "", reverse=True)
+    return rows
 
 
 def companies_by_ids(company_ids: list[str]) -> list[dict]:

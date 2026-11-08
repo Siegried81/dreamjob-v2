@@ -947,6 +947,37 @@ def test_learn_weights_needs_evidence_then_moves_them(db):
     assert all(0 < s["confidence"] <= 0.9 for s in suggestions)
 
 
+def test_learned_weights_stay_inside_the_band_after_normalising(db, monkeypatch):
+    """FR-285: each learned weight stays within its band of the default.
+
+    Clamping each weight to the band and then normalising the total can push a
+    weight straight back out: one component at its ceiling and the rest at
+    their floor came out at 3.2 times its default, 70% of the whole score.
+    """
+    seeker_id, _campaign, _company_id = _scored_campaign()
+    columns = scoring.COMPONENT_COLUMNS
+
+    def row(kept: bool) -> dict:
+        values = {
+            column: (100.0 if kept else 0.0) if name == "profile_fit"
+            else (0.0 if kept else 100.0)
+            for name, column in columns.items()
+        }
+        return {**values, "pinned": kept, "user_status": "new" if kept else "not_interested"}
+
+    rows = [row(True) for _ in range(4)] + [row(False) for _ in range(4)]
+    monkeypatch.setattr(scoring.repo, "feedback_rows", lambda _seeker: rows)
+
+    for _round in range(5):
+        learned = scoring.learn_weights(seeker_id)
+        weights = learned["weights"]
+        assert abs(sum(weights.values()) - 1.0) < 1e-9
+        for name, base in scoring.DEFAULT_WEIGHTS.items():
+            ratio = weights[name] / base
+            assert scoring.WEIGHT_FLOOR_FACTOR - 1e-9 <= ratio, (name, ratio)
+            assert ratio <= scoring.WEIGHT_CEILING_FACTOR + 1e-9, (name, ratio)
+
+
 # ---------------------------------------------------------------------------
 # The API surface (FR-283, FR-284, FR-263)
 # ---------------------------------------------------------------------------

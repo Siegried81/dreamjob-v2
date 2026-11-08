@@ -313,6 +313,37 @@ def normalise_weights(weights: dict[str, float] | None) -> dict[str, float]:
     return {k: v / total for k, v in merged.items()}
 
 
+def normalise_within_band(weights: dict[str, float]) -> dict[str, float]:
+    """Normalise to sum 1 while keeping each weight inside its FR-285 band.
+
+    Clamping first and normalising after is not enough: the division moves
+    every weight again, and one component at its ceiling with the rest at
+    their floor came out at 3.2 times its default.  So a weight that leaves
+    its band is pinned to the edge, and only the free weights are rescaled to
+    fill what is left, until none moves.  The bands always admit a solution:
+    the floors sum to 0.3 and the ceilings to 2.5.
+    """
+    low = {k: b * WEIGHT_FLOOR_FACTOR for k, b in DEFAULT_WEIGHTS.items()}
+    high = {k: b * WEIGHT_CEILING_FACTOR for k, b in DEFAULT_WEIGHTS.items()}
+    current = normalise_weights(weights)
+    pinned: dict[str, float] = {}
+    for _ in range(len(DEFAULT_WEIGHTS) + 1):
+        free = {k: v for k, v in current.items() if k not in pinned}
+        room = 1.0 - sum(pinned.values())
+        total = sum(free.values())
+        if total > 0:
+            free = {k: v * room / total for k, v in free.items()}
+        moved = False
+        for key, value in free.items():
+            if value < low[key] or value > high[key]:
+                pinned[key] = min(high[key], max(low[key], value))
+                moved = True
+        current = {**free, **pinned}
+        if not moved:
+            break
+    return current
+
+
 def load_weights(job_seeker_id: str) -> dict[str, float]:
     stored = repo.get_weights(job_seeker_id)
     return normalise_weights((stored or {}).get("weights"))
@@ -2749,7 +2780,7 @@ def learn_weights(job_seeker_id: str, *, apply: bool = True) -> dict[str, Any]:
             base * WEIGHT_CEILING_FACTOR, max(base * WEIGHT_FLOOR_FACTOR, weight)
         )
 
-    normalised = normalise_weights(proposed)
+    normalised = normalise_within_band(proposed)
     learned_from = {
         "method": "mean sub-score separation between kept and rejected opportunities",
         "positive": len(positive),

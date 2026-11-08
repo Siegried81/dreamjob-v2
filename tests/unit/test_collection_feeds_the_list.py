@@ -327,3 +327,76 @@ def test_the_pool_is_not_capped_at_five_thousand(db):
     pool = opp_repo.campaign_vacancies(campaign_id)
 
     assert len(pool) == 5_200, "the newest 5,000 is not the whole collection"
+
+
+# ---------------------------------------------------------------------------
+# The knowledge-base half of the pool is not capped either (FR-342)
+# ---------------------------------------------------------------------------
+
+
+def _touched_companies(campaign_id: str, count: int) -> list[str]:
+    """Companies this campaign touched through one plan item, by provenance."""
+    plan_item_id = campaign_repo.insert_plan_item(
+        campaign_id,
+        {"adapter_key": "feeds.board", "native_query": {}, "estimated_pages": 1},
+    )
+    now = utcnow()
+    ids = [f"c{n:07d}" for n in range(count)]
+    with write_tx() as conn:
+        for n, company_id in enumerate(ids):
+            conn.execute(
+                "INSERT INTO company (id, normalised_name, name, collected_at) "
+                "VALUES (?, ?, ?, ?)",
+                (company_id, f"company {n}", f"Company {n}", now),
+            )
+            conn.execute(
+                "INSERT INTO provenance (id, entity_type, entity_id, source_plan_item_id, "
+                "created_at) VALUES (?, 'company', ?, ?, ?)",
+                (f"pc{n:07d}", company_id, plan_item_id, now),
+            )
+    return ids
+
+
+def _knowledge_base_vacancies(company_ids: list[str], count: int) -> None:
+    """``count`` recent vacancies of these companies that no plan item collected."""
+    now = utcnow()
+    with write_tx() as conn:
+        for n in range(count):
+            conn.execute(
+                "INSERT INTO vacancy (id, company_id, title, company_name_raw, location, "
+                "country, dedup_key, collected_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (f"kb{n:07d}", company_ids[n % len(company_ids)], f"Analyst {n}",
+                 "Known NV", "Ghent", "BE", f"kb-dedup-{n}", now),
+            )
+
+
+def test_the_knowledge_base_reuse_is_not_capped_at_five_thousand(db):
+    """A repeat campaign re-uses the knowledge base instead of re-fetching it.
+
+    That half of the pool came from a query that kept the newest 5,000 rows,
+    so a repeat campaign over well-known employers lost the rest without a
+    word, while the campaign's own half had no cap at all.
+    """
+    from dreamjob.pipeline import opportunities as opp_mod
+
+    seeker = _seeker()
+    campaign_id = _campaign(seeker)
+    companies = _touched_companies(campaign_id, 3)
+    _knowledge_base_vacancies(companies, 5_200)
+
+    pool = opp_mod.campaign_vacancy_pool(campaign_id)
+
+    assert len(pool) == 5_200
+
+
+def test_the_knowledge_base_reuse_reads_many_companies_in_chunks(db):
+    """More touched companies than one statement may bind still all count."""
+    seeker = _seeker()
+    campaign_id = _campaign(seeker)
+    companies = _touched_companies(campaign_id, 1_200)
+    _knowledge_base_vacancies(companies, 1_200)
+
+    found = opp_repo.vacancies_for_companies(companies)
+
+    assert len(found) == 1_200
+    assert len({v["id"] for v in found}) == 1_200, "no row is read twice across chunks"
