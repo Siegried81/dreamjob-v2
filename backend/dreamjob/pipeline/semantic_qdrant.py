@@ -59,8 +59,14 @@ def _require_qdrant():
 
 
 def _client(qdrant_client, settings: Settings):
-    """A Qdrant client for the configured URL."""
-    return qdrant_client.QdrantClient(url=settings.qdrant_url)
+    """A Qdrant client for the configured URL, with the API key when one is set.
+
+    An empty key is passed as ``None`` so no ``api-key`` header goes out: Qdrant
+    Cloud needs the key, a local server started without one doesn't.
+    """
+    return qdrant_client.QdrantClient(
+        url=settings.qdrant_url, api_key=settings.qdrant_api_key or None
+    )
 
 
 def _collection(settings: Settings, entity_type: str) -> str:

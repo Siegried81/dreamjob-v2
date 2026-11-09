@@ -68,8 +68,9 @@ class _FakeQdrantClient:
 
     _servers: dict[str, dict] = {}
 
-    def __init__(self, url=None):
+    def __init__(self, url=None, api_key=None):
         self.url = url
+        self.api_key = api_key
         self.collections = _FakeQdrantClient._servers.setdefault(url, {})
 
     @classmethod
@@ -327,3 +328,15 @@ def test_missing_qdrant_client_raises_a_clear_install_hint(monkeypatch):
     monkeypatch.delitem(sys.modules, "qdrant_client", raising=False)
     with pytest.raises(RuntimeError, match="qdrant-client"):
         semantic_qdrant._require_qdrant()
+
+
+def test_the_api_key_reaches_the_client_only_when_set(fake_qdrant, monkeypatch):
+    module = sys.modules["qdrant_client"]
+    monkeypatch.setenv("DREAMJOB_QDRANT_API_KEY", "secret-key")
+    get_settings.cache_clear()
+    assert semantic_qdrant._client(module, get_settings()).api_key == "secret-key"
+
+    monkeypatch.setenv("DREAMJOB_QDRANT_API_KEY", "")
+    get_settings.cache_clear()
+    assert semantic_qdrant._client(module, get_settings()).api_key is None
+    get_settings.cache_clear()

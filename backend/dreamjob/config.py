@@ -90,6 +90,9 @@ class Settings(BaseSettings):
     # similarity.  qdrant-client is only needed for "qdrant".
     semantic_backend: str = Field("sqlite", alias="DREAMJOB_SEMANTIC_BACKEND")
     qdrant_url: str = Field("http://localhost:6333", alias="DREAMJOB_QDRANT_URL")
+    # Needed for a managed server (Qdrant Cloud). Empty sends no key, which is
+    # what a local server started without one expects.
+    qdrant_api_key: str = Field("", alias="DREAMJOB_QDRANT_API_KEY")
     # One Qdrant collection per entity_type, named "<prefix>_<entity_type>".
     qdrant_collection_prefix: str = Field("dreamjob", alias="DREAMJOB_QDRANT_COLLECTION_PREFIX")
 
