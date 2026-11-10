@@ -81,7 +81,22 @@ class _FakeQdrantClient:
         return collection_name in self.collections
 
     def create_collection(self, collection_name, vectors_config):
-        self.collections[collection_name] = {"size": vectors_config.size, "points": {}}
+        self.collections[collection_name] = {
+            "size": vectors_config.size,
+            "points": {},
+            "payload_schema": {},
+            "index_calls": [],
+        }
+
+    def get_collection(self, collection_name):
+        return types.SimpleNamespace(
+            payload_schema=dict(self.collections[collection_name]["payload_schema"])
+        )
+
+    def create_payload_index(self, collection_name, field_name, field_schema):
+        collection = self.collections[collection_name]
+        collection["payload_schema"][field_name] = field_schema
+        collection["index_calls"].append(field_name)
 
     def upsert(self, collection_name, points):
         store = self.collections[collection_name]["points"]
@@ -124,6 +139,7 @@ def _fake_models() -> types.SimpleNamespace:
     return types.SimpleNamespace(
         VectorParams=lambda size, distance: types.SimpleNamespace(size=size, distance=distance),
         Distance=types.SimpleNamespace(COSINE="Cosine"),
+        PayloadSchemaType=types.SimpleNamespace(KEYWORD="keyword", INTEGER="integer"),
         PointStruct=lambda id, vector, payload: types.SimpleNamespace(
             id=id, vector=vector, payload=payload
         ),
@@ -216,6 +232,62 @@ def test_backfill_indexes_and_skips_unchanged_text(db, fake_qdrant):
 
     # Second pass embeds nothing: the content hash is already stored.
     assert semantic.backfill("vacancy", llm=_Stub())["indexed"] == 0
+
+
+def test_backfill_creates_the_filter_payload_indexes_once(db, fake_qdrant):
+    # similarities() filters on entity_type and entity_id: both need a KEYWORD
+    # payload index so Qdrant can filter inside the HNSW search.
+    _vacancy("Data Engineer", "Build data pipelines")
+    semantic.backfill("vacancy", llm=_Stub())
+
+    client = _FakeQdrantClient(url=get_settings().qdrant_url)
+    name = f"{get_settings().qdrant_collection_prefix}_vacancy"
+    collection = client.collections[name]
+    assert collection["payload_schema"] == {"entity_type": "keyword", "entity_id": "keyword"}
+
+    # Idempotent: a second backfill with new text does not recreate them.
+    _vacancy("Account Executive", "Sell the product")
+    assert semantic.backfill("vacancy", llm=_Stub())["indexed"] == 1
+    assert sorted(collection["index_calls"]) == ["entity_id", "entity_type"]
+
+
+def test_a_collection_without_indexes_gets_them_on_the_next_backfill(db, fake_qdrant):
+    # A collection created before the indexes existed: only the missing one is added.
+    _vacancy("Data Engineer", "Build data pipelines")
+    client = _FakeQdrantClient(url=get_settings().qdrant_url)
+    name = f"{get_settings().qdrant_collection_prefix}_vacancy"
+    client.create_collection(name, types.SimpleNamespace(size=2))
+    client.collections[name]["payload_schema"]["entity_type"] = "keyword"
+
+    semantic.backfill("vacancy", llm=_Stub())
+
+    assert client.collections[name]["index_calls"] == ["entity_id"]
+    assert set(client.collections[name]["payload_schema"]) == {"entity_type", "entity_id"}
+
+
+def test_an_unchanged_collection_still_gets_its_missing_index(db, fake_qdrant):
+    # Every point is already up to date, so nothing is embedded. The missing
+    # entity_id index must still be created.
+    _vacancy("Data Engineer", "Build data pipelines")
+    assert semantic.backfill("vacancy", llm=_Stub())["indexed"] == 1
+    client = _FakeQdrantClient(url=get_settings().qdrant_url)
+    name = f"{get_settings().qdrant_collection_prefix}_vacancy"
+    collection = client.collections[name]
+    del collection["payload_schema"]["entity_id"]
+    collection["index_calls"].clear()
+
+    assert semantic.backfill("vacancy", llm=_Stub())["indexed"] == 0
+
+    assert collection["index_calls"] == ["entity_id"]
+
+
+def test_an_index_failure_does_not_stop_the_backfill(db, fake_qdrant, monkeypatch):
+    def _boom(self, **kwargs):
+        raise RuntimeError("index refused")
+
+    monkeypatch.setattr(_FakeQdrantClient, "create_payload_index", _boom)
+    _vacancy("Data Engineer", "Build data pipelines")
+    assert semantic.backfill("vacancy", llm=_Stub())["indexed"] == 1
 
 
 class _OtherModel(_Stub):
