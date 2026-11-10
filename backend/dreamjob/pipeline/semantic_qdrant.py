@@ -95,20 +95,53 @@ def _collection_exists(client, name: str) -> bool:
         return False
 
 
+# The payload fields ``similarities`` filters on. Both hold strings (the entity
+# type name and a UUID hex id), so both take a KEYWORD index, the type Qdrant
+# uses for exact ``MatchValue`` / ``MatchAny`` matches.
+_INDEXED_FIELDS = ("entity_type", "entity_id")
+
+
+def _ensure_payload_indexes(qdrant_models, client, name: str) -> None:
+    """Create the KEYWORD payload indexes the query filter needs, if missing.
+
+    Without them Qdrant can't apply the filter during the HNSW search
+    (filterable HNSW) nor pick a filtering strategy from the filter's
+    cardinality: it falls back to scanning payloads. Idempotent: the
+    collection's ``payload_schema`` is read first and only absent fields are
+    indexed, so a collection created before this existed gets its indexes on the
+    next backfill. A failure is logged, not raised: the index speeds the query
+    up, the query is correct without it.
+    """
+    try:
+        existing = set((client.get_collection(collection_name=name).payload_schema or {}).keys())
+        for field in _INDEXED_FIELDS:
+            if field not in existing:
+                client.create_payload_index(
+                    collection_name=name,
+                    field_name=field,
+                    field_schema=qdrant_models.PayloadSchemaType.KEYWORD,
+                )
+    except Exception:  # noqa: BLE001 - an optimisation, never a failure
+        log.warning("Qdrant payload index creation failed on %s", name, exc_info=True)
+
+
 def _ensure_collection(qdrant_models, client, name: str, dim: int) -> None:
     """Create the collection with the real runtime dimension if it is absent.
 
     COSINE is what makes the query score a cosine similarity, same as the
-    SQLite path.
+    SQLite path. The payload indexes are ensured either way, right after
+    creation for a new collection, so they exist before the first upsert (Qdrant
+    recommends indexing before loading the data, so HNSW builds the extra
+    filter-aware links as points arrive).
     """
-    if _collection_exists(client, name):
-        return
-    client.create_collection(
-        collection_name=name,
-        vectors_config=qdrant_models.VectorParams(
-            size=dim, distance=qdrant_models.Distance.COSINE
-        ),
-    )
+    if not _collection_exists(client, name):
+        client.create_collection(
+            collection_name=name,
+            vectors_config=qdrant_models.VectorParams(
+                size=dim, distance=qdrant_models.Distance.COSINE
+            ),
+        )
+    _ensure_payload_indexes(qdrant_models, client, name)
 
 
 def _known_hashes(client, name: str, entity_ids: list[str], model: str) -> dict[str, str]:
@@ -183,6 +216,10 @@ def backfill(
         candidates.append((row["id"], text, semantic._content_hash(text)))
 
     known = _known_hashes(client, name, [eid for eid, _, _ in candidates], model)
+    # An existing collection gets its indexes here, even when no text changed
+    # and the loop below never runs.
+    if _collection_exists(client, name):
+        _ensure_payload_indexes(qdrant_models, client, name)
     pending = [c for c in candidates if known.get(c[0]) != c[2]]
 
     indexed = 0
