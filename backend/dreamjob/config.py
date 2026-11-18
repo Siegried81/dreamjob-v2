@@ -179,6 +179,9 @@ class Settings(BaseSettings):
     # How often the scheduler re-reads the ATS boards of companies already in
     # someone's ranked list (pipeline/vacancy_refresh.py); 0 turns it off.
     vacancy_refresh_seconds: int = Field(600, alias="DREAMJOB_VACANCY_REFRESH_SECONDS")
+    # How often the scheduler deletes stale vacancies no opportunity uses
+    # (pipeline/knowledge_base.py purge_unlinked_vacancies); 0 turns it off.
+    vacancy_purge_seconds: int = Field(86400, alias="DREAMJOB_VACANCY_PURGE_SECONDS")
     # How often connected Gmail mailboxes are read for the job-alert e-mails of
     # the senders in mail/job_alerts.py ALERT_SOURCES; 0 turns it off.
     job_alerts_seconds: int = Field(900, alias="DREAMJOB_JOB_ALERTS_SECONDS")

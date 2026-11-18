@@ -472,6 +472,61 @@ def stale_rows(entity_type: str, cutoff: str, limit: int = 200) -> list[dict]:
     return []
 
 
+#: A vacancy no opportunity points at and nobody has seen since ``cutoff``.
+#: ``opportunity.vacancy_id`` is the only column in the schema that holds a
+#: vacancy id, so this is the whole of "unreferenced".
+_UNLINKED_STALE_VACANCIES = (
+    "SELECT id FROM vacancy WHERE collected_at < ? "
+    "AND NOT EXISTS (SELECT 1 FROM opportunity o WHERE o.vacancy_id = vacancy.id)"
+)
+
+
+def purge_unlinked_vacancies(cutoff: str, *, dry_run: bool = False) -> dict[str, int]:
+    """Delete the vacancies no opportunity uses and nobody has seen since ``cutoff``.
+
+    Collection stores every posting it reads, but only the few that pass a
+    campaign's directives become opportunities; the rest pile up and go stale,
+    because nothing re-reads their source.  A stale row that no opportunity
+    points at is used by nothing: the knowledge-base dedup only compares
+    against fresh rows, and ``fresh_only`` search hides it.
+
+    Rows linked to an opportunity are kept whatever their age, so a ranked
+    list never loses the posting behind one of its entries.  ``provenance``
+    and ``embedding`` key their rows by ``entity_id`` with no foreign key, so
+    their vacancy rows are deleted here too rather than left orphaned.  The
+    ``vacancy_fts`` index follows through its ``AFTER DELETE`` trigger.
+
+    Returns the counts; with ``dry_run`` they are what would be deleted.
+    """
+    with write_tx() as conn:
+        conn.execute("CREATE TEMP TABLE IF NOT EXISTS purge_vacancy (id TEXT PRIMARY KEY)")
+        conn.execute("DELETE FROM purge_vacancy")
+        conn.execute(f"INSERT INTO purge_vacancy {_UNLINKED_STALE_VACANCIES}", (cutoff,))
+        counts = {
+            "vacancies": conn.execute("SELECT COUNT(*) FROM purge_vacancy").fetchone()[0],
+            "provenance": conn.execute(
+                "SELECT COUNT(*) FROM provenance WHERE entity_type = 'vacancy' "
+                "AND entity_id IN (SELECT id FROM purge_vacancy)"
+            ).fetchone()[0],
+            "embeddings": conn.execute(
+                "SELECT COUNT(*) FROM embedding WHERE entity_type = 'vacancy' "
+                "AND entity_id IN (SELECT id FROM purge_vacancy)"
+            ).fetchone()[0],
+        }
+        if not dry_run:
+            conn.execute(
+                "DELETE FROM provenance WHERE entity_type = 'vacancy' "
+                "AND entity_id IN (SELECT id FROM purge_vacancy)"
+            )
+            conn.execute(
+                "DELETE FROM embedding WHERE entity_type = 'vacancy' "
+                "AND entity_id IN (SELECT id FROM purge_vacancy)"
+            )
+            conn.execute("DELETE FROM vacancy WHERE id IN (SELECT id FROM purge_vacancy)")
+        conn.execute("DELETE FROM purge_vacancy")
+    return {key: int(value) for key, value in counts.items()}
+
+
 # ---------------------------------------------------------------------------
 # Campaign-independent browse / search (FR-345)
 # ---------------------------------------------------------------------------
