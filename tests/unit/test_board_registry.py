@@ -154,9 +154,8 @@ def test_every_seed_row_is_a_fetchable_plan_item(registry: dict) -> None:
     and what ``ATSAdapter.slugs_of()`` reads, so discovery can emit one plan
     item per (vendor, slug) with no LLM and no guessing.
 
-    Teamtailor and Workable are seeded ahead of their adapters (N8): a row
-    whose vendor has no adapter yet must still name a real board URL, so the
-    registry does not have to be rebuilt when the adapters land.
+    Every vendor in the registry, Teamtailor and Workable included, must have
+    an adapter that reads it.
     """
     discover()                                       # @register_adapter runs on import
     sample = {b["vendor"]: b for b in registry["boards"]}          # one per vendor
@@ -165,9 +164,7 @@ def test_every_seed_row_is_a_fetchable_plan_item(registry: dict) -> None:
     for vendor, board in sample.items():
         assert detect.board_url(vendor, board["slug"]), vendor
         adapter_key = detect.adapter_key_for(vendor)
-        if adapter_key is None:                      # adapter still to be written (N8)
-            assert vendor in {"teamtailor", "workable"}, vendor
-            continue
+        assert adapter_key, vendor
         adapter = get_adapter(adapter_key)
         assert adapter.vendor == vendor
         item = {"native_query": {"board_slugs": [board["slug"]]}}

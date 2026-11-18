@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     # --- Egress (FR-182, IR-102) -------------------------------------------
     user_agent: str = Field(
-        "DreamJobBot/0.1 (+https://stepvda.net/dreamjob; contact stephane@stepvda.com)",
+        "DreamJobBot/0.1",
         alias="DREAMJOB_USER_AGENT",
     )
     http_cache_ttl_seconds: int = Field(86_400, alias="DREAMJOB_HTTP_CACHE_TTL_SECONDS")

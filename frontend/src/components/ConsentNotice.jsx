@@ -23,7 +23,7 @@ import { formatDate } from './ui'
 // before the initial GET /auth/consent has returned, or if that call failed;
 // once loaded the authoritative `consent.text` is shown instead.
 const FALLBACK_TEXT =
-  'Profile, campaign and vacancy text is sent to the DeepSeek API, which processes it ' +
+  'Profile, campaign and vacancy text is sent to the configured model API, which processes it ' +
   'outside the European Union, to extract, score and generate content. Fields marked ' +
   '"do not disclose" (FR-106) and special categories of personal data (FR-127) are ' +
   'removed before any prompt is sent.'

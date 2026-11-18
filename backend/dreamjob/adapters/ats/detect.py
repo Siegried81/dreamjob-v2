@@ -14,7 +14,7 @@ Detection is deliberately deterministic - three signals, in order of trust:
 3. embedded board widgets (``boards.greenhouse.io/embed/job_board?for=acme``,
    ``Grnhse.Iframe``, ``ashby_embed``, Recruitee's ``careers-site`` script).
 
-Vendors without an adapter here (Workable, Teamtailor, SuccessFactors, ...) are
+Vendors without an adapter here (SuccessFactors, JOIN, ...) are
 still reported: knowing which ATS a company runs is useful profiling
 information even when Dream Job cannot read the board.  So is a vendor whose
 tenant slug never appears - a board served on the company's own domain
@@ -42,9 +42,12 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 log = logging.getLogger(__name__)
 
-#: Vendors this package can actually collect from.
+#: Vendors this package can actually collect from.  Every ``ats.*`` adapter
+#: must be listed: a vendor missing here makes :func:`adapter_key_for` return
+#: ``None``, and the vacancy refresh and the watchlist then skip its boards.
 SUPPORTED_VENDORS = (
     "greenhouse", "lever", "smartrecruiters", "ashby", "recruitee", "personio", "workday",
+    "teamtailor", "workable",
 )
 
 _ADAPTER_KEYS = {vendor: f"ats.{vendor}" for vendor in SUPPORTED_VENDORS}

@@ -23,7 +23,7 @@ point rather than carrying the shared one. Work done here is offered back
 upstream as a pull request rather than pushed to it.
 
 Most of the application came with that snapshot (commit `422d760`, 2026-10-06),
-including 2,193 of the 2,475 tests the CI command runs today. What was built in
+including 2,193 of the 2,482 tests the CI command runs today. What was built in
 this repository since is readable from `git log`: CI and Dependabot, the Windows
 fixes, the `imap_basic` mail backend, `scripts/ingest_alerts.py`, area search
 (ported from upstream), the French register adapter, the read-only Microsoft 365
@@ -144,9 +144,9 @@ than aspirational:
 | company-domain decision | `pipeline/company_domains.py` | a namesake domain is refused, visibly |
 
 **Scale** (re-derived 2026-11-09, Python and test figures 2026-11-18;
-`backend/**/*.py`, `frontend/**/*.{js,jsx}`, `tests/**/*.py`): 246 Python modules / 129,060 lines ·
-147 JS modules / 45,056 lines · 144 test files / 70,598 lines ·
-**2,460 of 2,475 tests pass offline, 15 skipped, none failing** (backend; the
+`backend/**/*.py`, `frontend/**/*.{js,jsx}`, `tests/**/*.py`): 246 Python modules / 129,118 lines ·
+147 JS modules / 45,056 lines · 145 test files / 70,678 lines ·
+**2,467 of 2,482 tests pass offline, 15 skipped, none failing** (backend; the
 frontend has no test suite) · 101 tables · 158 indexes ·
 46 migrations · 36 source adapters · 24 versioned prompt templates.
 **156 of 157 requirements (99%)** from the specification are cited in the

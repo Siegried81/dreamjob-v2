@@ -144,7 +144,7 @@ def test_every_registry_board_becomes_its_own_plan_item(db, tmp_path, monkeypatc
             {"vendor": "greenhouse", "slug": "bravo", "name": "Bravo", "country": "US"},
             {"vendor": "greenhouse", "slug": "charlie"},
             {"vendor": "lever", "slug": "delta", "name": "Delta NV", "country": "NL"},
-            {"vendor": "workable", "slug": "echo"},          # no adapter yet: not planned
+            {"vendor": "workable", "slug": "echo"},          # not in the catalogue: not planned
         ],
     )
 
@@ -161,7 +161,7 @@ def test_every_registry_board_becomes_its_own_plan_item(db, tmp_path, monkeypatc
         assert ATSAdapter.slugs_of(item) == [item["native_query"]["slug"]]
         assert item["estimated_pages"] == 1, "an ATS page is one whole board"
         assert item["estimated_cost_eur"] == 0.0, "a board is parsed without an LLM (C7)"
-    assert not _items(summary, "ats.workable"), "a vendor with no adapter is not planned"
+    assert not _items(summary, "ats.workable"), "a vendor missing from the catalogue is not planned"
     assert summary["discovery"]["boards"]["registry"] == 4
 
 
