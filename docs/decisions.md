@@ -288,3 +288,32 @@ kept from rejected rows took it to 2.86x its default after five learning rounds
 (0.55). Weights already saved keep their values until the next learning run.
 The weights a seeker sets by hand and the FR-425 outcome nudge in
 `postapp/outcomes.py` do not go through this path and are unchanged.
+
+## 2026-11-18: stale vacancies that no opportunity uses are deleted
+
+**What changed.** A new scheduler task, `vacancy_purge`, runs once a day. It
+deletes every vacancy that no opportunity points at and that nobody has seen
+for the vacancy staleness window, never less than 7 days
+(`PURGE_MIN_DAYS` in `pipeline/knowledge_base.py`). Their `provenance` and
+`embedding` rows go with them. `scripts/purge_unlinked_vacancies.py` does the
+same by hand, counts by default, and backs the database up before `--apply`.
+`DREAMJOB_VACANCY_PURGE_SECONDS=0` turns the task off.
+
+**Why.** Until now nothing ever deleted a vacancy. On the development database
+on 2026-11-18 there were 17,323 vacancies; 14,626 were linked to no opportunity,
+and 12,918 of those had not been seen for more than 7 days, most of them from a
+single board sweep on 2026-10-04 that no task re-reads. The app already treats
+such a row as stale: dedup compares only against fresh rows and `fresh_only`
+search hides it. Keeping it only made the table, the full-text index and the
+`provenance` table (353,233 rows for those vacancies) grow. All 14,626 were
+removed by hand the same day, the equivalent of `--days 0 --apply`, with a
+backup kept next to the database.
+
+**What it does not touch.** A vacancy behind an opportunity is kept at any age,
+so no ranked list loses its source posting. A fresh vacancy is kept even when
+unlinked, because a campaign may still rank it. The 7-day floor is there
+because the staleness policy accepts 0 days, and read literally that would let
+the daily task delete postings the moment they are stored.
+
+**What would reverse it.** Setting `DREAMJOB_VACANCY_PURGE_SECONDS=0`. Rows
+already deleted come back only from a backup.

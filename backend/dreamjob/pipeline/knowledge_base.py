@@ -132,6 +132,36 @@ def is_stale(
     return str(collected_at) < cutoff_for(entity_type, policy)
 
 
+#: The purge never reaches a vacancy seen more recently than this, whatever the
+#: staleness policy says.  The policy accepts 0 days ("always re-collect"), and
+#: a scheduled purge reading that literally would delete every posting the
+#: moment it was stored, before a campaign had a chance to rank it.
+PURGE_MIN_DAYS = 7
+
+
+def purge_unlinked_vacancies(
+    days: int | None = None,
+    *,
+    dry_run: bool = False,
+    policy: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    """Delete stale vacancies that no opportunity uses (see the repository function).
+
+    ``days`` is how long a vacancy may go unseen before it goes.  Left out, it
+    is the vacancy staleness window (FR-343) with :data:`PURGE_MIN_DAYS` as a
+    floor: past that window the rest of the app already treats the row as
+    stale, so the purge removes nothing the app still reads.  An explicit
+    ``days`` is taken as given, so an operator can clear everything unlinked
+    with ``days=0``.
+    """
+    if days is None:
+        days = max(PURGE_MIN_DAYS, (policy or get_staleness_policy()).get("vacancy", 7))
+    days = max(0, int(days))
+    cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat(timespec="seconds")
+    counts = repo.purge_unlinked_vacancies(cutoff, dry_run=dry_run)
+    return {**counts, "days": days, "cutoff": cutoff, "dry_run": dry_run}
+
+
 # ---------------------------------------------------------------------------
 # Writer (FR-166, FR-184, FR-341, FR-344)
 # ---------------------------------------------------------------------------

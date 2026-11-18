@@ -1,6 +1,7 @@
 """The periodic loop (FR-401, FR-403, FR-327, FR-364, NFR-303).
 
-Five recurring pieces of work, none of which belongs to a request:
+Recurring pieces of work, none of which belongs to a request.  The table lists
+the main ones; ``DEFAULT_TASKS`` at the bottom of this module is the full set:
 
 ============================  ==========  ==================================
 task                          default     what it does
@@ -28,6 +29,9 @@ task                          default     what it does
                                           their retention date (NFR-303)
 ``llm_redaction``             daily       nulls prompt and response text
                                           past its retention (FR-364)
+``vacancy_purge``             daily       deletes stale vacancies that no
+                                          opportunity uses
+                                          (``DREAMJOB_VACANCY_PURGE_SECONDS``)
 ============================  ==========  ==================================
 
 Two properties make this safe to run inside the API process:
@@ -239,6 +243,27 @@ async def _run_retention() -> dict[str, Any]:
     from dreamjob.db.repositories import contacts as contacts_repo  # noqa: PLC0415
 
     return await asyncio.to_thread(contacts_repo.sweep_retention)
+
+
+def _vacancy_purge_tick() -> dict[str, Any]:
+    """One purge, on a worker thread in the bulk write lane like the other sweeps."""
+    from dreamjob.pipeline import knowledge_base  # noqa: PLC0415 - avoids an import cycle
+
+    with write_lane(BULK):
+        try:
+            return knowledge_base.purge_unlinked_vacancies()
+        finally:
+            close_thread_connections()
+
+
+async def _run_vacancy_purge() -> dict[str, Any]:
+    """Delete stale vacancies no opportunity uses (FR-343).
+
+    Collection keeps every posting it reads; only the ones a campaign retains
+    become opportunities.  Without this the rest stay in the table for good,
+    long after the employer has taken them down.
+    """
+    return await asyncio.to_thread(_vacancy_purge_tick)
 
 
 async def _run_llm_redaction() -> dict[str, Any]:
@@ -510,6 +535,8 @@ HOUR = 3600
 _VACANCY_REFRESH_SECONDS = get_settings().vacancy_refresh_seconds
 #: ``DREAMJOB_JOB_ALERTS_SECONDS``; 0 switches the task off.
 _JOB_ALERTS_SECONDS = get_settings().job_alerts_seconds
+#: ``DREAMJOB_VACANCY_PURGE_SECONDS``; 0 switches the task off.
+_VACANCY_PURGE_SECONDS = get_settings().vacancy_purge_seconds
 
 DEFAULT_TASKS: list[Task] = [
     Task("vacancy_refresh", max(60, _VACANCY_REFRESH_SECONDS), _run_vacancy_refresh,
@@ -539,6 +566,9 @@ DEFAULT_TASKS: list[Task] = [
          "Delete third-party records past their retention date (NFR-303)"),
     Task("llm_redaction", 24 * HOUR, _run_llm_redaction,
          "Redact LLM prompts and responses past their retention (FR-364)"),
+    Task("vacancy_purge", max(60, _VACANCY_PURGE_SECONDS), _run_vacancy_purge,
+         "Delete stale vacancies that no opportunity uses (FR-343)",
+         enabled=_VACANCY_PURGE_SECONDS > 0),
 ]
 
 

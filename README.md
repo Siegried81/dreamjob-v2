@@ -23,7 +23,7 @@ point rather than carrying the shared one. Work done here is offered back
 upstream as a pull request rather than pushed to it.
 
 Most of the application came with that snapshot (commit `422d760`, 2026-10-06),
-including 2,193 of the 2,459 tests the CI command runs today. What was built in
+including 2,193 of the 2,475 tests the CI command runs today. What was built in
 this repository since is readable from `git log`: CI and Dependabot, the Windows
 fixes, the `imap_basic` mail backend, `scripts/ingest_alerts.py`, area search
 (ported from upstream), the French register adapter, the read-only Microsoft 365
@@ -143,10 +143,10 @@ than aspirational:
 | employer-kind verdict | `pipeline/employer_resolver.py` | no verdict without evidence |
 | company-domain decision | `pipeline/company_domains.py` | a namesake domain is refused, visibly |
 
-**Scale** (re-derived 2026-11-09; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
-`tests/**/*.py`): 246 Python modules / 128,905 lines ·
-147 JS modules / 45,056 lines · 143 test files / 70,221 lines ·
-**2,444 of 2,459 tests pass offline, 15 skipped, none failing** (backend; the
+**Scale** (re-derived 2026-11-09, Python and test figures 2026-11-18;
+`backend/**/*.py`, `frontend/**/*.{js,jsx}`, `tests/**/*.py`): 246 Python modules / 129,060 lines ·
+147 JS modules / 45,056 lines · 144 test files / 70,598 lines ·
+**2,460 of 2,475 tests pass offline, 15 skipped, none failing** (backend; the
 frontend has no test suite) · 101 tables · 158 indexes ·
 46 migrations · 36 source adapters · 24 versioned prompt templates.
 **156 of 157 requirements (99%)** from the specification are cited in the
@@ -299,6 +299,19 @@ scored, and announced once as a `new_vacancy` notification. Vacancy fetches
 treat a cached board as fresh for one hour (`DREAMJOB_VACANCY_CACHE_TTL_SECONDS`);
 after that it is revalidated, which costs a 0-byte 304 when nothing changed.
 
+**Old vacancies are deleted.** Collection stores every posting it reads, but
+only the ones a campaign retains become opportunities. Once a day the
+`vacancy_purge` task deletes the vacancies no opportunity uses and nobody has
+seen for the staleness window (7 days, never less), with their provenance and
+embeddings. A vacancy behind an opportunity is kept at any age.
+`DREAMJOB_VACANCY_PURGE_SECONDS=0` turns it off. To see what it would remove,
+or to clear everything unlinked at once:
+
+    PYTHONPATH=backend .venv/Scripts/python.exe scripts/purge_unlinked_vacancies.py
+    PYTHONPATH=backend .venv/Scripts/python.exe scripts/purge_unlinked_vacancies.py --days 0 --apply
+
+The first line only counts. `--apply` backs the database up next to itself first.
+
 To discover beyond the boards already followed, turn on the continuous cycle in
 **Admin → Continuous** with a 300 s interval. The UI receives updates live
 through `/api/events/stream`.
@@ -370,7 +383,7 @@ direct `os.environ` reads are optional registry API keys,
 - **Mail** — `DREAMJOB_MAIL_BACKEND`, `DREAMJOB_MAIL_DRY_RUN`, `GMAIL_*`, `M365_*`, `RESEND_API_KEY`, `DREAMJOB_SEND_DAILY_CAP`, send window and interval
 - **Egress** — user agent, per-domain RPS, concurrency, cache and negative-cache TTL, `DREAMJOB_VACANCY_CACHE_TTL_SECONDS` (freshness window for vacancy fetches), robots and crawl-delay flags, raw-document retention
 - **Browser** — `DREAMJOB_CDP_URL`, profile directory, human pacing bounds
-- **Scheduler** — `DREAMJOB_SCHEDULER_ENABLED`, `DREAMJOB_SCHEDULER_TICK_SECONDS`, `DREAMJOB_VACANCY_REFRESH_SECONDS` (0 turns the vacancy refresh off)
+- **Scheduler** — `DREAMJOB_SCHEDULER_ENABLED`, `DREAMJOB_SCHEDULER_TICK_SECONDS`, `DREAMJOB_VACANCY_REFRESH_SECONDS` (0 turns the vacancy refresh off), `DREAMJOB_VACANCY_PURGE_SECONDS` (0 turns the vacancy purge off)
 - **Observability** — log directory, level, format, rotation, slow-request and slow-query thresholds
 
 ---
