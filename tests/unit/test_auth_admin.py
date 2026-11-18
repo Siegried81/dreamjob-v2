@@ -171,7 +171,7 @@ def test_llm_transfer_consent_gates_profile_egress(client: TestClient) -> None:
 
     # CR-410: what is recorded is the text this system presented; a note from
     # the job seeker is kept beside it and cannot take its place.
-    assert granted.json()["detail"].startswith(auth.CONSENT_KINDS["llm_transfer"])
+    assert granted.json()["detail"].startswith(auth.consent_text("llm_transfer"))
     assert "I agreed to nothing" in granted.json()["detail"]
 
     # Withdrawal is recorded as a new decision; the history keeps both.

@@ -895,7 +895,7 @@ def acknowledgement_state(job_seeker_id: str) -> dict[str, Any]:
         "acknowledged": bool(state.get("granted")),
         "decided_at": state.get("decided_at"),
         "warning": terms_warning(),
-        "consent_text": state.get("text") or auth.CONSENT_KINDS[CONSENT_KIND],
+        "consent_text": state.get("text") or auth.consent_text(CONSENT_KIND),
     }
 
 

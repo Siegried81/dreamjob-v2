@@ -29,6 +29,7 @@ import string
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import pyotp
 
@@ -48,8 +49,10 @@ MIN_PASSWORD_LENGTH = 9
 # recorded alongside the answer so a later reader knows what was agreed to.
 CONSENT_KINDS: dict[str, str] = {
     # CR-410: transfer of profile data to a provider outside the EU.
+    # The provider is named from the configuration at the moment the text is
+    # presented: see consent_text().
     "llm_transfer": (
-        "Profile, campaign and vacancy text is sent to the DeepSeek API, which processes it "
+        "Profile, campaign and vacancy text is sent to {providers}, which processes it "
         "outside the European Union, to extract, score and generate content. Fields marked "
         "'do not disclose' (FR-106) and special categories of personal data (FR-127) are "
         "removed before any prompt is sent."
@@ -67,6 +70,57 @@ CONSENT_KINDS: dict[str, str] = {
         "user-supplied data only."
     ),
 }
+
+#: Display names for the OpenAI-compatible hosts this deployment is known to use.
+_PROVIDER_NAMES = {
+    "api.groq.com": "Groq",
+    "api.deepseek.com": "DeepSeek",
+    "openrouter.ai": "OpenRouter",
+    "api.openai.com": "OpenAI",
+    "api.mistral.ai": "Mistral",
+}
+
+
+def _provider_label(base_url: str) -> str:
+    """``"the Groq API (api.groq.com)"`` for a base URL, or the bare host if unknown."""
+    host = (urlparse(base_url or "").hostname or "").lower()
+    if not host:
+        return ""
+    name = _PROVIDER_NAMES.get(host)
+    return f"the {name} API ({host})" if name else f"the API at {host}"
+
+
+def llm_transfer_providers() -> list[str]:
+    """Every remote model API profile text can reach with the current settings.
+
+    The consent must name where the data goes.  A fixed provider name went stale
+    the moment the endpoint was pointed elsewhere (a Groq URL behind a text that
+    still said DeepSeek), so the names are read from the same settings the LLM
+    client reads: the primary endpoint, plus the fallback only when it has a key,
+    since without one it is never called.
+    """
+    s = get_settings()
+    labels = [_provider_label(s.deepseek_base_url)]
+    if (s.fallback_llm_api_key or "").strip():
+        labels.append(_provider_label(s.fallback_llm_base_url))
+    seen: list[str] = []
+    for label in labels:
+        if label and label not in seen:
+            seen.append(label)
+    return seen
+
+
+def consent_text(kind: str) -> str:
+    """The text presented, and recorded, for one consent kind (CR-410)."""
+    text = CONSENT_KINDS[kind]
+    if kind == "llm_transfer":
+        providers = llm_transfer_providers() or ["the configured model API"]
+        joined = providers[0] if len(providers) == 1 else (
+            f"{providers[0]} (and, when that fails, {' and '.join(providers[1:])})"
+        )
+        text = text.format(providers=joined)
+    return text
+
 
 _COMMON_PASSWORDS = {
     "password", "passw0rd", "123456789012", "qwertyuiop12", "letmein12345",
@@ -126,7 +180,8 @@ class ConsentRequired(RuntimeError):
         self.kind = kind
         super().__init__(
             f"Consent {kind!r} has not been given. "
-            f"{CONSENT_KINDS.get(kind, '')} Record it via POST /api/auth/consent."
+            f"{consent_text(kind) if kind in CONSENT_KINDS else ''} "
+            "Record it via POST /api/auth/consent."
         )
 
 
@@ -377,7 +432,7 @@ def record_consent(seeker_id: str, kind: str, granted: bool, detail: str | None 
     """
     if kind not in CONSENT_KINDS:
         raise ValueError(f"Unknown consent kind {kind!r}; expected one of {sorted(CONSENT_KINDS)}")
-    presented = CONSENT_KINDS[kind]
+    presented = consent_text(kind)
     stored = f"{presented}\n\nNote from the job seeker: {detail}" if detail else presented
     consent_id = repo.record_consent(seeker_id, kind, granted, stored)
     record_audit(
@@ -411,12 +466,12 @@ def consent_state(seeker_id: str) -> dict[str, Any]:
     return {
         kind: {
             "kind": kind,
-            "text": text,
+            "text": consent_text(kind),
             "granted": bool(latest[kind]["granted"]) if kind in latest else False,
             "decided_at": latest[kind]["granted_at"] if kind in latest else None,
             "detail": latest[kind]["detail"] if kind in latest else None,
         }
-        for kind, text in CONSENT_KINDS.items()
+        for kind in CONSENT_KINDS
     }
 
 

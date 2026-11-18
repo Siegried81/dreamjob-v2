@@ -267,10 +267,31 @@ def test_detect_ats(html, url, expected):
 
 def test_detect_ats_reports_vendors_without_an_adapter():
     """Knowing the ATS is useful profiling even when the board cannot be read."""
-    vendor, slug = detect_ats('<iframe src="https://acme.teamtailor.com/jobs"></iframe>', None)
-    assert (vendor, slug) == ("teamtailor", "acme")
+    vendor, slug = detect_ats('<script src="https://join.com/companies/acme"></script>', None)
+    assert vendor == "join"
     assert adapter_key_for(vendor) is None
-    assert board_url(vendor, slug) == "https://acme.teamtailor.com/jobs"
+    assert board_url("join", "acme") == "https://join.com/companies/acme"
+
+
+def test_every_ats_adapter_is_reachable_from_its_vendor():
+    """The refresh and the watchlist find an adapter through ``adapter_key_for``.
+
+    Teamtailor and Workable had adapters but were missing from the vendor list,
+    so every followed board on them failed with "no adapter" and was never
+    re-read after the first campaign.
+    """
+    from dreamjob.adapters import discover
+    from dreamjob.adapters.base import all_adapters
+
+    discover()
+    # Only the package's own adapters: other tests register stub "ats.*" keys.
+    ats_keys = {
+        key for key, cls in all_adapters().items()
+        if key.startswith("ats.") and cls.__module__.startswith("dreamjob.adapters.ats.")
+    }
+    assert {"ats.teamtailor", "ats.workable"} <= ats_keys
+    for key in ats_keys:
+        assert adapter_key_for(key.removeprefix("ats.")) == key, key
 
 
 def test_board_url_and_adapter_key_round_trip():

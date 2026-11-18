@@ -317,3 +317,24 @@ the daily task delete postings the moment they are stored.
 
 **What would reverse it.** Setting `DREAMJOB_VACANCY_PURGE_SECONDS=0`. Rows
 already deleted come back only from a backup.
+
+## 2026-11-18: the CR-410 consent names the model API in use
+
+**What changed.** The `llm_transfer` consent text no longer says "the DeepSeek
+API" whatever the configuration. `consent_text()` in
+`security/auth_service.py` names the host of `DEEPSEEK_BASE_URL`, plus the host
+of `DREAMJOB_FALLBACK_LLM_BASE_URL` when `DREAMJOB_FALLBACK_LLM_API_KEY` is set
+(without a key the fallback is never called). Known hosts get a name ("the Groq
+API (api.groq.com)"); an unknown one is shown as its host. The same text is
+shown, stored with the decision, and quoted in `ConsentRequired`.
+
+**Why.** The development install sends prompts to Groq through the
+OpenAI-compatible endpoint, with DeepSeek behind it as a paid fallback. The
+screen asked the job seeker to agree to a transfer to DeepSeek alone, which was
+not the transfer taking place.
+
+**What it does not change.** Who must consent, and when: the gate is the same.
+A consent recorded before this change keeps the text it was given with, so the
+record still says what was agreed to at the time. Changing the endpoint later
+does not reset an existing consent; the stored text shows which provider it
+covered.
