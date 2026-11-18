@@ -45,3 +45,20 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  # Base images of the two Dockerfile stages. CI and the runtime image both use
+  # Python 3.11, and CI builds the frontend on Node 22, so only patch updates
+  # within those come in. Moving to a new minor or major is a deliberate change:
+  # bump CI and the Dockerfile together.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+    ignore:
+      - dependency-name: python
+        versions: [">=3.12"]
+      - dependency-name: node
+        versions: [">=23"]
+    groups:
+      docker:
+        patterns: ["*"]
