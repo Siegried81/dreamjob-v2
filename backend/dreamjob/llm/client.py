@@ -94,9 +94,15 @@ def _response_cache_key(
     temperature: float,
     max_tokens: int,
     json_mode: bool,
+    strong: bool = False,
 ) -> str:
+    # The role is part of the key because one model name can serve both roles
+    # (deepseek-flash, with thinking off for cheap calls and on for strong ones).
+    # Without it, a strong retry of a cached task replays the cheap answer it is
+    # meant to replace.
     blob = json.dumps(
-        [task, model, system, user, round(float(temperature), 3), max_tokens, bool(json_mode)],
+        [task, model, system, user, round(float(temperature), 3), max_tokens, bool(json_mode),
+         bool(strong)],
         sort_keys=True,
     )
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
@@ -124,6 +130,23 @@ def clear_response_cache() -> None:
     """Drop the in-process response cache (used by tests and the admin screen)."""
     with _RESPONSE_CACHE_LOCK:
         _RESPONSE_CACHE.clear()
+
+
+def thinking_switch(base_url: str, strong: bool) -> dict[str, str] | None:
+    """DeepSeek's ``thinking`` request field for a call, or ``None`` for other hosts.
+
+    DeepSeek serves one model, deepseek-flash, where it used to serve a chat
+    model and a reasoner, and thinking is on unless the request turns it off.
+    Cheap calls turn it off: on ``classify.employer_kind`` (7 labelled sites,
+    2 repeats) thinking left accuracy at 14/14 but spent 2.4x the output tokens
+    (615 against 257), took 3.7 s against 2.1 s, and ran out of the task's
+    900-token budget on 4 of 14 calls.  Strong calls keep it on, which is what
+    the reasoner gave them.  Other OpenAI-compatible hosts (Groq, a local model)
+    don't know the field, so it is only sent to DeepSeek.
+    """
+    if "api.deepseek.com" not in (base_url or ""):
+        return None
+    return {"type": "enabled" if strong else "disabled"}
 
 
 # The steps NFR-306 names as privacy-sensitive, by task group and by task
@@ -509,8 +532,7 @@ class LLMClient:
         per_task = cfg.get("task_models") or {}
         model = per_task.get(task) or per_task.get(group)
         if not model:
-            if prefer_strong is None:
-                prefer_strong = task in TASK_STRONG or task not in TASK_CHEAP
+            prefer_strong = self.wants_strong(task, prefer_strong)
             model = (
                 cfg.get("model_strong") or s.llm_model_strong
                 if prefer_strong
@@ -523,21 +545,28 @@ class LLMClient:
             cfg.get("provider") or s.llm_provider,
         )
 
+    @staticmethod
+    def wants_strong(task: str, prefer_strong: bool | None = None) -> bool:
+        """Whether a call takes the strong role: asked for, or a task not known as cheap."""
+        if prefer_strong is None:
+            return task in TASK_STRONG or task not in TASK_CHEAP
+        return bool(prefer_strong)
+
     def _fallback_endpoint(
-        self, base_url: str, model: str
+        self, base_url: str, strong: bool
     ) -> tuple[str, list[str], str, str] | None:
         """The ``(base_url, keys, model, provider)`` to try when the main endpoint fails.
 
         ``None`` without a fallback key, or when the call is already going to
-        that endpoint.  The fallback model mirrors the main choice: the strong
-        one for a call routed to the strong model, the cheap one otherwise.
+        that endpoint.  The fallback model follows the call's role, the strong
+        one or the cheap one.  The role is passed in rather than read from the
+        main model's name, because one name (deepseek-flash) can serve both.
         """
         s = self.settings
         key = (s.fallback_llm_api_key or "").strip()
         fallback_url = (s.fallback_llm_base_url or "").strip()
         if not key or not fallback_url or fallback_url.rstrip("/") == base_url.rstrip("/"):
             return None
-        strong = model == s.llm_model_strong
         return (
             fallback_url,
             [key],
@@ -583,6 +612,7 @@ class LLMClient:
         retries: int = 2,
     ) -> LLMResult:
         base_url, api_key, model, provider = self.route(task, prefer_strong)
+        strong = self.wants_strong(task, prefer_strong)
         if not api_key and provider != "local":
             raise LLMError(
                 f"No API key configured for provider {provider!r}. Set DEEPSEEK_API_KEY in .env."
@@ -602,7 +632,7 @@ class LLMClient:
         cache_key: str | None = None
         if task in CACHEABLE_TASKS:
             cache_key = _response_cache_key(
-                task, model, system, user, temperature, max_tokens, json_mode
+                task, model, system, user, temperature, max_tokens, json_mode, strong
             )
             cached = _response_cache_get(cache_key)
             if cached is not None:
@@ -659,7 +689,7 @@ class LLMClient:
         # call.  It is tried last on purpose: the main endpoint is the free one,
         # and the fallback is paid for only on the calls the main one dropped.
         endpoints = [(base_url, keys, model, provider)]
-        fallback = self._fallback_endpoint(base_url, model)
+        fallback = self._fallback_endpoint(base_url, strong)
         if fallback is not None:
             endpoints.append(fallback)
         last_error: Exception | None = None
@@ -668,6 +698,11 @@ class LLMClient:
         # the endpoint that answered, for the cost and the FR-364 call log.
         for base_url, keys, model, provider in endpoints:  # noqa: B007
             payload["model"] = model
+            thinking = thinking_switch(base_url, strong)
+            if thinking is None:
+                payload.pop("thinking", None)
+            else:
+                payload["thinking"] = thinking
             for attempt in range(retries + 1):
                 try:
                     with httpx.Client(timeout=self.timeout) as client:

@@ -139,7 +139,7 @@ def test_the_fallback_endpoint_answers_when_every_main_key_fails(monkeypatch) ->
         llm_model_cheap="llama-3.1-8b-instant",
         fallback_llm_base_url="https://api.deepseek.com",
         fallback_llm_api_key="ds",
-        fallback_llm_model_cheap="deepseek-chat",
+        fallback_llm_model_cheap="deepseek-flash",
     )
 
     result = client.complete("classify.reply", "s", "u", prefer_strong=False, retries=0)
@@ -147,8 +147,8 @@ def test_the_fallback_endpoint_answers_when_every_main_key_fails(monkeypatch) ->
     assert result.text == "ok"
     assert seen == ["k1", "k2", "ds"]
     assert urls[-1] == "https://api.deepseek.com/chat/completions"
-    assert models == ["llama-3.1-8b-instant", "llama-3.1-8b-instant", "deepseek-chat"]
-    assert result.model == "deepseek-chat"
+    assert models == ["llama-3.1-8b-instant", "llama-3.1-8b-instant", "deepseek-flash"]
+    assert result.model == "deepseek-flash"
 
 
 @pytest.mark.usefixtures("db")
@@ -181,7 +181,7 @@ def _per_key_status(status: int, failing: set[str], seen: list[str]):
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        def __enter__(self) -> "_Client":
+        def __enter__(self) -> _Client:
             return self
 
         def __exit__(self, *exc: object) -> bool:
@@ -324,7 +324,7 @@ def test_a_mix_of_429_and_401_still_walks_the_whole_list(monkeypatch) -> None:
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        def __enter__(self) -> "_Client":
+        def __enter__(self) -> _Client:
             return self
 
         def __exit__(self, *exc: object) -> bool:

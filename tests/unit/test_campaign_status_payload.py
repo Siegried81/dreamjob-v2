@@ -24,9 +24,6 @@ from __future__ import annotations
 import json
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
 from dreamjob.adapters.base import AdapterCapabilities
 from dreamjob.api.deps import CurrentSeeker, current_seeker
 from dreamjob.config import get_settings
@@ -34,6 +31,8 @@ from dreamjob.db.connection import insert_row, upsert_row, utcnow
 from dreamjob.db.migrator import migrate
 from dreamjob.db.repositories import campaigns as campaign_repo
 from dreamjob.pipeline import collection
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 ADAPTER = "payload.board"
 #: Big enough that, repeated 200 times, the fields the old payload embedded

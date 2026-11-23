@@ -338,3 +338,54 @@ A consent recorded before this change keeps the text it was given with, so the
 record still says what was agreed to at the time. Changing the endpoint later
 does not reset an existing consent; the stored text shows which provider it
 covered.
+
+## 2026-11-20: deepseek-flash for both roles, thinking off for cheap calls
+
+**What changed.** DeepSeek retired `deepseek-chat` and `deepseek-reasoner`; its
+model list now has `deepseek-flash` (DeepSeek-V4.1-Flash) and the dearer
+`deepseek-v4-pro`. Every default that named the old models now names
+`deepseek-flash`, for the cheap and the strong role, main and fallback
+(`config.py`, `.env.example`). With one model name for both roles, the role
+travels in the request instead: `llm.client.thinking_switch` sends
+`"thinking": {"type": "disabled"}` on cheap calls and `"enabled"` on strong
+ones, and only to `api.deepseek.com`, since Groq and a local model don't know
+the field. The response-cache key now includes the role.
+
+**Why thinking is off for cheap calls.** Flash thinks unless told not to. On
+`classify.employer_kind`, the cheap task with the tightest budget (900 tokens),
+measured on the 7 labelled sites of `tests/fixtures/employer_kind` with the
+rung's own prompt and validator, 2 repeats each, 20 November 2026:
+
+| deepseek-flash | thinking off | thinking on |
+|---|---|---|
+| correct verdicts | 14/14 | 14/14 |
+| first calls cut at the 900-token cap | 0 | 4 of 14 (each retried on the strong role) |
+| output tokens, first call, mean | 257 | 615 |
+| latency, first call, median | 2.1 s | 3.7 s |
+
+Thinking bought nothing on that task and cost 2.4x the output tokens. Strong
+calls keep it, which is what the reasoner gave them. In thinking mode DeepSeek
+ignores `temperature`, so a strong call's temperature has no effect.
+
+**Why the cache key changed.** `classify.employer_kind` is cached and retries a
+badly shaped answer on the strong role. With the same model name on both
+roles, the retry would have been served the cached cheap answer it was meant
+to replace (`tests/unit/test_llm_thinking.py`).
+
+**What it does not change.** The development `.env` sends the main calls to
+Groq (`openai/gpt-oss-20b` and `-120b`), which get no `thinking` field. Only
+the paid DeepSeek fallback, and an install pointed at DeepSeek, are affected.
+The measured figures in `E2E_1500_Verification.md`,
+`Employer_Kind_Results.md` and `Agency_Research_Design.md` were taken on
+`deepseek-chat` and `deepseek-reasoner` and stay as written. The fallback now
+takes its model from the call's role rather than from comparing model names,
+which can no longer tell the roles apart.
+
+**Known limit.** The admin screen pins a task to a model *name*
+(`task_models`), and the call's role still comes from the task. With
+`deepseek-flash` on both roles, pinning a strong task to "Cheap" changes
+nothing, thinking included, and the two options in `TaskRouting.jsx` read the
+same. It only matters when DeepSeek is the main endpoint; giving the strong
+role another name (`deepseek-v4-pro`) brings the choice back. Storing a role
+instead of a name would touch the admin API, the screen and the stored
+settings, so it waits until an install needs it.

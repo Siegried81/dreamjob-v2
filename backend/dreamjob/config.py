@@ -55,19 +55,23 @@ class Settings(BaseSettings):
     deepseek_api_key_5: str = Field("", alias="DEEPSEEK_API_KEY_5")
     # A second OpenAI-compatible endpoint tried only when the main one still
     # fails after all its keys and retries (e.g. Groq first, DeepSeek behind
-    # it).  No key = no fallback.  deepseek-chat for both roles by default: it
-    # is the cheaper model, and the fallback exists to keep a call alive.
+    # it).  No key = no fallback.  deepseek-flash for both roles by default:
+    # DeepSeek serves no other chat model at that price, and the fallback exists
+    # to keep a call alive.  The client turns thinking off for cheap calls and on
+    # for strong ones (``llm.client.thinking_switch``).
     fallback_llm_base_url: str = Field(
         "https://api.deepseek.com", alias="DREAMJOB_FALLBACK_LLM_BASE_URL"
     )
     fallback_llm_api_key: str = Field("", alias="DREAMJOB_FALLBACK_LLM_API_KEY")
-    fallback_llm_model_cheap: str = Field("deepseek-chat", alias="DREAMJOB_FALLBACK_LLM_MODEL_CHEAP")
+    fallback_llm_model_cheap: str = Field("deepseek-flash", alias="DREAMJOB_FALLBACK_LLM_MODEL_CHEAP")
     fallback_llm_model_strong: str = Field(
-        "deepseek-chat", alias="DREAMJOB_FALLBACK_LLM_MODEL_STRONG"
+        "deepseek-flash", alias="DREAMJOB_FALLBACK_LLM_MODEL_STRONG"
     )
     deepseek_base_url: str = Field("https://api.deepseek.com", alias="DEEPSEEK_BASE_URL")
-    llm_model_cheap: str = Field("deepseek-chat", alias="DREAMJOB_LLM_MODEL_CHEAP")
-    llm_model_strong: str = Field("deepseek-reasoner", alias="DREAMJOB_LLM_MODEL_STRONG")
+    # DeepSeek retired deepseek-chat and deepseek-reasoner; deepseek-flash takes
+    # both roles, told apart by the thinking switch rather than by the name.
+    llm_model_cheap: str = Field("deepseek-flash", alias="DREAMJOB_LLM_MODEL_CHEAP")
+    llm_model_strong: str = Field("deepseek-flash", alias="DREAMJOB_LLM_MODEL_STRONG")
 
     # NFR-306: privacy-sensitive tasks may be routed to a local model.
     local_llm_base_url: str = Field("", alias="DREAMJOB_LOCAL_LLM_BASE_URL")

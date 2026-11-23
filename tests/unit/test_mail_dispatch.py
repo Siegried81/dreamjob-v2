@@ -30,6 +30,7 @@ _ENV_KEYS = (
     "DREAMJOB_SESSION_SECRET",
     "DREAMJOB_ENV",
     "RESEND_API_KEY",
+    "DREAMJOB_MAIL_FROM",
     "GMAIL_CLIENT_ID",
     "GMAIL_CLIENT_SECRET",
 )
@@ -44,6 +45,9 @@ def isolated_db(tmp_path: Path) -> Iterator[None]:
     os.environ["DREAMJOB_SESSION_SECRET"] = secrets.token_urlsafe(32)
     os.environ["DREAMJOB_ENV"] = "development"
     os.environ["RESEND_API_KEY"] = ""
+    # Blanked like the key: a sender set in the machine's .env would otherwise
+    # replace the default sender these tests check for.
+    os.environ["DREAMJOB_MAIL_FROM"] = ""
     os.environ["GMAIL_CLIENT_ID"] = ""
     os.environ["GMAIL_CLIENT_SECRET"] = ""
     get_settings.cache_clear()

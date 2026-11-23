@@ -255,7 +255,7 @@ def _seed_campaign(seeker_id: str) -> dict[str, str]:
             "job_seeker_id": seeker_id,
             "campaign_id": campaign_id,
             "task": "extract.vacancy",
-            "model": "deepseek-chat",
+            "model": "deepseek-flash",
             "provider": "deepseek",
             "prompt_text": "personal data in the prompt",
             "response_text": "personal data in the response",
@@ -576,8 +576,8 @@ def test_llm_config_override_and_log_redaction(client: TestClient) -> None:
     put = client.put(
         "/api/admin/llm-config",
         json={
-            "model_strong": "deepseek-reasoner",
-            "task_models": {"extract.vacancy": "deepseek-chat"},
+            "model_strong": "deepseek-v4-pro",
+            "task_models": {"extract.vacancy": "deepseek-flash"},
             "default_token_budget": 500_000,
             "log_retention_days": 7,
         },
@@ -585,7 +585,7 @@ def test_llm_config_override_and_log_redaction(client: TestClient) -> None:
     assert put.status_code == 200
     effective = client.get("/api/admin/llm-config").json()["effective"]
     assert effective["default_token_budget"] == 500_000
-    assert effective["task_models"]["extract.vacancy"] == "deepseek-chat"
+    assert effective["task_models"]["extract.vacancy"] == "deepseek-flash"
     assert effective["log_retention_days"] == 7
 
     calls = client.get("/api/admin/llm-calls").json()
