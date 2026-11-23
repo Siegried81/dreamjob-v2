@@ -36,6 +36,7 @@ from dreamjob.db.connection import (
     utcnow,
     write_tx,
 )
+from dreamjob.db.repositories import apply as apply_repo
 from dreamjob.db.repositories import contacts as contact_repo
 from dreamjob.documents import internship
 from dreamjob.security import at_rest
@@ -62,7 +63,6 @@ def _encode_sensitive(payload: dict[str, Any], job_seeker_id: str) -> dict[str, 
         )
     return payload
 
-PACKAGE_STATUSES = frozenset({"draft", "approved", "discarded", "sent"})
 
 _UPDATABLE = frozenset(
     {
@@ -235,6 +235,8 @@ def approve_packages(
             )
             if cur.rowcount:
                 approved.append(package_id)
+    for package_id in approved:
+        apply_repo.set_selection_status_for_package(job_seeker_id, package_id, "approved")
     return approved
 
 
@@ -251,13 +253,6 @@ def delete_package(package_id: str, job_seeker_id: str) -> int:
         "DELETE FROM application_package WHERE id = ? AND job_seeker_id = ? AND status != 'sent'",
         (package_id, job_seeker_id),
     )
-
-
-def has_dispatch(package_id: str) -> bool:
-    row = query_one(
-        "SELECT COUNT(*) AS n FROM dispatch WHERE application_package_id = ?", (package_id,)
-    )
-    return bool(row and int(row["n"]))
 
 
 def record_audit(

@@ -45,7 +45,6 @@ import hashlib
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
-from email.message import EmailMessage
 from typing import Any, ClassVar
 
 import httpx
@@ -552,9 +551,3 @@ class GmailBackend(MailBackend):
         return base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4))
 
 
-def to_mime_bytes(message: OutgoingMessage) -> bytes:
-    """Convenience for tests and for the IMAP APPEND path."""
-    from dreamjob.mail.composer import to_mime  # noqa: PLC0415
-
-    mime: EmailMessage = to_mime(message)
-    return mime.as_bytes()

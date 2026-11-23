@@ -679,7 +679,7 @@ Three backends behind one interface:
 
 | | Gmail OAuth | IMAP + SMTP (`imap_basic`) | Resend |
 |---|---|---|---|
-| Sends as | The job seeker's own mailbox | The job seeker's own mailbox (Yahoo, iCloud, ...) | `DREAMJOB_MAIL_FROM` (default `stephane@stepvda.com`) |
+| Sends as | The job seeker's own mailbox | The job seeker's own mailbox (Yahoo, iCloud, ...) | `DREAMJOB_MAIL_FROM`, an address on a domain verified at Resend (no default; Resend cannot send as a Gmail address, so sending as Gmail goes through the Gmail connection) |
 | Replies | Land in the inbox; detected by IMAP | Land in the inbox; read over IMAP | No inbox; webhook events |
 | Credentials | Refresh token, encrypted per job seeker, revocable | Application password, encrypted per job seeker | API key |
 | Scopes | `gmail.send` + `gmail.readonly` for bounce reading | — (API only: `POST /api/mail/imap/connect`) | — |

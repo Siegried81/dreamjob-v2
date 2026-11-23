@@ -400,22 +400,6 @@ async def geocode(
     return results[0] if results else None
 
 
-async def geocode_many(
-    queries: list[str], *, country_codes: list[str] | None = None, language: str = "en"
-) -> dict[str, GeocodeResult | None]:
-    """Resolve several places over one client, still paced at 1 req/s."""
-    out: dict[str, GeocodeResult | None] = {}
-    unique = [q for q in dict.fromkeys(q.strip() for q in queries if q and q.strip())]
-    if not unique:
-        return out
-    async with _geocoder_client() as client:
-        for item in unique:
-            out[item] = await geocode(
-                item, country_codes=country_codes, language=language, egress=client
-            )
-    return out
-
-
 async def reverse(
     latitude: float, longitude: float, *, language: str = "en", egress: EgressClient | None = None
 ) -> GeocodeResult | None:

@@ -351,16 +351,6 @@ class ChallengeVerdict:
         }
 
 
-class ChallengeDetected(RuntimeError):
-    """Raised the instant a challenge, captcha or rate-limit page appears (FR-203)."""
-
-    def __init__(self, verdict: ChallengeVerdict):
-        self.verdict = verdict
-        super().__init__(
-            f"{verdict.kind} page detected at {verdict.url} ({verdict.evidence}); stopping"
-        )
-
-
 _SCRIPT_STYLE_RE = re.compile(
     r"<(script|style|noscript|template)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL
 )

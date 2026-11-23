@@ -1,5 +1,8 @@
 # Agency research: establishing, from evidence, who actually employs
 
+**Built today:** the ladder in `pipeline/employer_resolver.py`, the free signals (`employer_signals.py`), the KBO register rung (`employer_registry_rung.py`), the website rung (`employer_website_rung.py`), the verdict model (`employer_kind.py`), the product layer (`employer_product.py`) and migrations 110 to 113.
+**Not built:** the EURES section-O rung and the R2 and R3 signals (`PROVIDER_PATHS` names a rung module that doesn't exist, so the trail records it as unavailable); only Belgium has a register rung.
+
 *Design note, 2026-09-09. All numbers measured on `data/dreamjob.db` (read-only)
 and on the live sites and registers named below; throwaway scripts and the
 fetched pages are in the session scratchpad, not in the repository.*

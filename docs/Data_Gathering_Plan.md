@@ -1,5 +1,8 @@
 # Data Gathering Plan — reaching 10,000 jobs from 7,500 companies
 
+**Built today:** the discovery stage (`pipeline/discovery.py`) fed by the board registry (`pipeline/board_registry.py`, `scripts/import_board_registry.py`), the fetch ledger (migration 090), the Workable, Teamtailor and Actiris adapters, and the raised default caps in `pipeline/planning.py` (`max_pages` 10,000, `max_companies` 8,000).
+**Changed since:** the rule against touching Jobat is now an acknowledgement gate (`board.jobat` needs IR-101). Whether one campaign reaches 7,500 companies and 10,000 jobs has not been re-measured, it needs a live run.
+
 *Decision document, 2026-09-09. Synthesises three independent evaluations (sources, funnel, caching) of the first data-gathering phase. All endpoint figures were measured from this machine on 2026-09-09 with the product's own User-Agent and no credentials; probe scripts and raw results are in the session scratchpad (paths in the appendix). No application code was changed.*
 
 ---

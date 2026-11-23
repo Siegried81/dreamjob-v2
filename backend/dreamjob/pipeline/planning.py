@@ -375,15 +375,6 @@ def _is_search_term(text: str) -> bool:
     return not text.endswith(".")
 
 
-def campaign_skills(composite: dict | None) -> list[str]:
-    found: list[str] = []
-    if composite:
-        for column in ("core_competencies", "adjacent_competencies"):
-            _flatten_strings(from_json(composite.get(column), None), found)
-        _walk(from_json(composite.get("evidence_refs"), {}) or {}, _SKILL_KEYS, found)
-    return _unique(found, 20)
-
-
 # Keys of the FR-144 location group that name a *place*.  Everything else in
 # that group - commute_mode, place_type, geocoded_at, radius_km - describes how
 # the seeker travels or how the label was resolved, and naming a job board

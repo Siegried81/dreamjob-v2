@@ -19,7 +19,7 @@ import { Caution, HelpTip } from '../../components/Help'
 import Icon from '../../components/Icon'
 import { Badge, ErrorBox, Modal, SectionCard, formatDuration } from '../../components/ui'
 
-const BACKEND_NAME = { gmail_oauth: 'Gmail (OAuth)', resend: 'Resend (stepvda.com relay)' }
+const BACKEND_NAME = { gmail_oauth: 'Gmail (OAuth)', resend: 'Resend relay' }
 
 export default function SendingRules({ settings, queued, onProcessed }) {
   const [confirm, setConfirm] = useState(false)

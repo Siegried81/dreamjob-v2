@@ -40,7 +40,7 @@ def isolated_db(tmp_path: Path) -> Iterator[None]:
     os.environ["DEEPSEEK_API_KEY"] = ""
     os.environ["DREAMJOB_LOCAL_LLM_BASE_URL"] = ""
     os.environ.pop("DREAMJOB_APPLY_ALLOW_SEND", None)
-    os.environ["DREAMJOB_MAIL_FROM"] = "stephane@stepvda.com"
+    os.environ["DREAMJOB_MAIL_FROM"] = "you@example.com"
     get_settings.cache_clear()
 
     from dreamjob.db.migrator import migrate
@@ -63,7 +63,7 @@ def isolated_db(tmp_path: Path) -> Iterator[None]:
 SECTIONS = {
     "contact": {
         "name": "Stephane van der Aa", "headline": "Data & AI",
-        "email": "stephane@stepvda.com", "phone": "+32 470 11 22 33", "location": "Gent",
+        "email": "you@example.com", "phone": "+32 470 11 22 33", "location": "Gent",
         "linkedin_url": "linkedin.com/in/svda", "websites": [],
     },
     "summary": "Twintig jaar ervaring in data en analytics.",
@@ -90,7 +90,7 @@ def seed() -> dict[str, str]:
     now = utcnow()
     seeker = insert_row(
         "job_seeker",
-        {"email": "stephane@stepvda.com", "display_name": "Stephane van der Aa",
+        {"email": "you@example.com", "display_name": "Stephane van der Aa",
          "locale": "nl", "created_at": now, "updated_at": now},
     )
     version = insert_row(
@@ -365,19 +365,19 @@ def test_objecting_after_the_package_exists_blocks_approval_and_send() -> None:
     # Approve before the objection, so it is NFR-302 that refuses the send and
     # not the FR-324 approval gate.
     assert repo.approve_packages(
-        ids["seeker"], [result.package_id], "stephane@stepvda.com"
+        ids["seeker"], [result.package_id], "you@example.com"
     ) == [result.package_id]
 
     contacts_repo.record_objection("els.peeters@zenith.example", source="reply")
 
     approval = package_module.approve(
-        ids["seeker"], [result.package_id], actor="stephane@stepvda.com"
+        ids["seeker"], [result.package_id], actor="you@example.com"
     )
     assert approval["approved"] == []
     assert {"objection"} <= {b["kind"] for b in approval["refused"][0]["blockers"]}
 
     sent = apply_packages.send_package(
-        ids["seeker"], result.package_id, actor="stephane@stepvda.com"
+        ids["seeker"], result.package_id, actor="you@example.com"
     )
     assert sent["sent"] is False
     assert "NFR-302" in sent["refused"]
@@ -451,7 +451,7 @@ def _approved(ids: dict[str, str]) -> str:
     from dreamjob.pipeline import apply_packages
 
     result = apply_packages.generate_package(ids["seeker"], ids["opportunity"])
-    approved = repo.approve_packages(ids["seeker"], [result.package_id], "stephane@stepvda.com")
+    approved = repo.approve_packages(ids["seeker"], [result.package_id], "you@example.com")
     assert approved == [result.package_id]
     return result.package_id
 
@@ -462,7 +462,7 @@ def test_send_is_a_dry_run_and_writes_the_message_to_disk() -> None:
     ids = seed()
     package_id = _approved(ids)
     outcome = apply_packages.send_package(
-        ids["seeker"], package_id, actor="stephane@stepvda.com"
+        ids["seeker"], package_id, actor="you@example.com"
     )
 
     assert outcome["sent"] is False and outcome["dry_run"] is True
@@ -512,7 +512,7 @@ def test_dry_run_send_never_reaches_the_dispatcher(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(dispatcher, "send_package", explode)
     outcome = apply_packages.send_all(
-        ids["seeker"], [package_id], actor="stephane@stepvda.com"
+        ids["seeker"], [package_id], actor="you@example.com"
     )
     assert outcome["dry_run"] is True and outcome["sent"] == 0
     assert outcome["prepared"] == 1
@@ -525,7 +525,7 @@ def test_an_unapproved_package_is_refused() -> None:
     ids = seed()
     result = apply_packages.generate_package(ids["seeker"], ids["opportunity"])
     outcome = apply_packages.send_package(
-        ids["seeker"], result.package_id, actor="stephane@stepvda.com"
+        ids["seeker"], result.package_id, actor="you@example.com"
     )
     assert outcome["sent"] is False
     assert "FR-324" in outcome["refused"]
@@ -545,7 +545,7 @@ async def test_generate_many_reports_progress_and_is_resumable() -> None:
         [ids["opportunity"], ids["speculative"]],
         concurrency=2,
         campaign_id=ids["campaign"],
-        actor="stephane@stepvda.com",
+        actor="you@example.com",
     )
     job_id = started["job_id"]
     for _ in range(600):
@@ -716,7 +716,7 @@ def test_send_all_refuses_one_package_without_abandoning_the_batch() -> None:
     ids = seed()
     package_id = _approved(ids)
     outcome = apply_packages.send_all(
-        ids["seeker"], ["does-not-exist", package_id], actor="stephane@stepvda.com"
+        ids["seeker"], ["does-not-exist", package_id], actor="you@example.com"
     )
 
     assert outcome["requested"] == 2 and outcome["sent"] == 0
@@ -783,3 +783,53 @@ def test_a_generic_unverified_recipient_is_advisory_not_blocking():
         )
         == []
     )
+
+
+def test_the_selection_row_follows_the_package_to_sent() -> None:
+    """``apply_selection.status`` is the per-row state the Apply Browser shows.
+
+    It was written once, as ``selected``, and never moved: generation, approval
+    and dispatch all changed the package and left the selection saying
+    ``selected``.  Each step now moves it, so the screen and the package agree.
+    """
+    from dreamjob.db.repositories import applications as repo
+    from dreamjob.db.repositories import apply as apply_repo
+    from dreamjob.db.repositories import dispatch as dispatch_repo
+    from dreamjob.pipeline import apply_packages
+
+    ids = seed()
+    apply_repo.select_many(ids["seeker"], [ids["opportunity"]])
+
+    def state() -> str:
+        return apply_repo.selection(ids["seeker"])[0]["status"]
+
+    assert state() == "selected"
+    result = apply_packages.generate_package(ids["seeker"], ids["opportunity"])
+    assert state() == "ready"
+    repo.approve_packages(ids["seeker"], [result.package_id], "owner@example.org")
+    assert state() == "approved"
+    dispatch_repo.mark_package_sent(result.package_id, ids["seeker"])
+    assert state() == "sent"
+
+
+def test_a_failed_generation_marks_the_selection_failed() -> None:
+    from dreamjob.db.repositories import apply as apply_repo
+    from dreamjob.pipeline import apply_packages
+
+    ids = seed()
+    apply_repo.select_many(ids["seeker"], [ids["opportunity"]])
+    original = apply_packages._generate_documents
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("the renderer fell over")
+
+    apply_packages._generate_documents = broken
+    try:
+        outcome = apply_packages._generate_one(
+            ids["seeker"], ids["opportunity"], False, apply_packages.Options(), None
+        )
+    finally:
+        apply_packages._generate_documents = original
+
+    assert outcome["status"] == "failed"
+    assert apply_repo.selection(ids["seeker"])[0]["status"] == "failed"

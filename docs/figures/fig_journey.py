@@ -17,10 +17,9 @@ Every number comes from ``facts.py``; every colour from ``style.py``.
 
 from __future__ import annotations
 
+import facts
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
-
-import facts
 import style
 from style import INK, INK_2, INK_3, LINE, PHASE, PHASE_SOFT
 

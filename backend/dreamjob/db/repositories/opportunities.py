@@ -612,18 +612,6 @@ def save_compensation(
     )
 
 
-def delete_campaign_opportunities(job_seeker_id: str, campaign_id: str) -> int:
-    with write_tx() as conn:
-        cur = conn.execute(
-            "DELETE FROM opportunity WHERE job_seeker_id = ? AND campaign_id = ?",
-            (job_seeker_id, campaign_id),
-        )
-        deleted = cur.rowcount
-    if deleted:
-        invalidate_active_seeker_cache()
-    return deleted
-
-
 def delete_opportunities(job_seeker_id: str, opportunity_ids: list[str]) -> int:
     """Delete named opportunities, filtered on their owner (FR-344).
 
@@ -703,7 +691,6 @@ def ids_touching_user_decisions(job_seeker_id: str, opportunity_ids: list[str]) 
             ):
                 protected.add(str(row["opportunity_id"]))
     return protected
-
 
 
 # ---------------------------------------------------------------------------
@@ -901,16 +888,6 @@ def company_signals(company_id: str, limit: int = 40) -> list[dict]:
 
 def company_analysis(company_id: str) -> dict | None:
     return query_one("SELECT * FROM financial_analysis WHERE company_id = ?", (company_id,))
-
-
-def company_structure_and_people(company_id: str) -> dict:
-    row = query_one(
-        "SELECT structure, key_people, tech_stack, products_services, business_summary, "
-        "values_culture, news, size_fte, size_band, stage, ownership, trajectory, "
-        "sector_codes, locations, country FROM company WHERE id = ?",
-        (company_id,),
-    )
-    return dict(row) if row else {}
 
 
 def competitor_hiring(company_id: str, limit: int = 25) -> list[dict]:

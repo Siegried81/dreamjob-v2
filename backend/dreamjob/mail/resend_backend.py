@@ -1,7 +1,7 @@
 """Resend transactional relay (FR-325, FR-326, NFR-302).
 
 The second dispatch backend.  It sends over Resend's HTTP API from the
-project's own domain (``stephane@stepvda.com``) and exists for the case where
+address in ``DREAMJOB_MAIL_FROM`` and exists for the case where
 no personal mailbox has been connected: the job seeker still gets a send path,
 ``Reply-To`` still points at their address, and a reply still reaches them.
 
@@ -13,11 +13,12 @@ complaint handling for this backend therefore lives in
 capability flags say so, so the inbox poller does not try to poll a mailbox
 that is not there.
 
-**The API key is not available yet.**  The backend is complete; it simply has
-nothing to authenticate with until ``RESEND_API_KEY`` is put in ``.env``.  That
-state is reported by :meth:`ResendBackend.status` as ``configured: false`` with
-the exact reason, and a send raises :class:`MailBackendNotConfigured` with the
-same text rather than failing somewhere deeper.
+**It needs two settings.**  ``RESEND_API_KEY`` to authenticate and a sender
+address (``DREAMJOB_MAIL_FROM``, on a domain verified at Resend).  With either
+missing, :meth:`ResendBackend.status` reports ``configured: false`` with the
+exact reason, and a send raises :class:`MailBackendNotConfigured` with the same
+text rather than failing somewhere deeper.  There is no built-in sender: Resend
+cannot send as a Gmail address, so a default would only ever be wrong.
 """
 
 from __future__ import annotations
@@ -47,9 +48,6 @@ log = logging.getLogger(__name__)
 
 API_ENDPOINT = "https://api.resend.com/emails"
 
-#: The verified sending identity for this installation.
-DEFAULT_FROM = "stephane@stepvda.com"
-
 #: Where the webhook signing secret is kept.  It is a rotatable operational
 #: secret rather than deployment configuration, so it lives in ``app_setting``
 #: and can be changed from the administration screen without a restart.
@@ -58,13 +56,27 @@ WEBHOOK_SECRET_KEY = "mail.resend_webhook_secret"
 #: Reject a webhook whose timestamp is further away than this (replay window).
 WEBHOOK_TOLERANCE_SECONDS = 5 * 60
 
-NOT_CONFIGURED_MESSAGE = (
-    "Resend is not configured: RESEND_API_KEY is empty. Create an API key at "
-    "https://resend.com/api-keys, verify the sending domain for "
-    f"{DEFAULT_FROM}, then add RESEND_API_KEY=re_... to .env and restart. "
-    "Until then, connect a Gmail mailbox instead - it is also the only backend "
-    "that puts replies in your own inbox."
-)
+
+
+def not_configured_reason(*, has_key: bool, has_sender: bool) -> str | None:
+    """What is missing for the relay to send, or ``None`` when nothing is."""
+    missing = []
+    if not has_key:
+        missing.append(
+            "RESEND_API_KEY is empty (create a key at https://resend.com/api-keys)"
+        )
+    if not has_sender:
+        missing.append(
+            "DREAMJOB_MAIL_FROM is empty (use an address on a domain verified at "
+            "https://resend.com/domains; Resend cannot send as a Gmail address)"
+        )
+    if not missing:
+        return None
+    return (
+        "Resend is not configured: " + " and ".join(missing) + ". Set it in .env and restart. "
+        "Until then, connect a Gmail mailbox instead - it is also the only backend "
+        "that puts replies in your own inbox."
+    )
 
 #: Resend event type -> the ``dispatch.delivery_status`` it implies (FR-326).
 EVENT_STATUS: dict[str, str] = {
@@ -85,7 +97,7 @@ class WebhookVerificationError(RuntimeError):
 class ResendBackend(MailBackend):
     capabilities: ClassVar[BackendCapabilities] = BackendCapabilities(
         key="resend",
-        display_name="Resend (stepvda.com relay)",
+        display_name="Resend relay",
         # No mailbox of the job seeker's own: Reply-To routes replies to them,
         # but Dream Job never sees them (section 2.4).
         replies_to_seeker_inbox=False,
@@ -105,19 +117,24 @@ class ResendBackend(MailBackend):
         return get_settings().resend_api_key.strip()
 
     def sender_address(self) -> str:
-        return (self.account.get("address") or get_settings().mail_from or DEFAULT_FROM).strip()
+        return (self.account.get("address") or get_settings().mail_from or "").strip()
+
+    def not_configured_reason(self) -> str | None:
+        return not_configured_reason(
+            has_key=bool(self.api_key), has_sender=bool(self.sender_address())
+        )
 
     def status(self) -> dict:
         settings = get_settings()
-        configured = bool(self.api_key)
+        reason = self.not_configured_reason()
         return {
             "backend": self.key,
-            "configured": configured,
-            "reason": None if configured else NOT_CONFIGURED_MESSAGE,
+            "configured": reason is None,
+            "reason": reason,
             "from_address": self.sender_address(),
             "webhook_path": "/api/mail/resend/webhook",
             "webhook_secret_set": bool(webhook_secret()),
-            "mail_from_setting": settings.mail_from or DEFAULT_FROM,
+            "mail_from_setting": settings.mail_from,
             "capabilities": self.capabilities.__dict__,
         }
 
@@ -165,8 +182,9 @@ class ResendBackend(MailBackend):
         return payload
 
     def send(self, message: OutgoingMessage) -> SendResult:
-        if not self.api_key:
-            raise MailBackendNotConfigured(NOT_CONFIGURED_MESSAGE)
+        reason = self.not_configured_reason()
+        if reason:
+            raise MailBackendNotConfigured(reason)
         self.check_message(message)
         if not message.from_email:
             message.from_email = self.sender_address()

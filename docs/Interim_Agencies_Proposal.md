@@ -1,12 +1,15 @@
 # Interim and staffing-agency postings: proposal
 
+**Built today:** the proposal's employer-kind ladder, `pipeline/employer_resolver.py` with `employer_signals.py`, `employer_registry_rung.py` and `employer_website_rung.py`, the `agency_names.json` lexicon, the badge (`EmployerKindBadge.jsx`) and the gates on the research passes (`employer_product.intermediary_company_ids`).
+**Not built:** the EURES section-O rung, the R2 and R3 signals and any non-Belgian register; the 43-employer labelled set is `tests/fixtures/agency_labels.json`.
+
 *Design decision, 2026-09-09. Synthesised from four independent evaluations of
 `data/dreamjob.db` (read-only, 2,741 vacancy rows) and of the live EURES and
 KBO endpoints, together with the earlier note `docs/Agency_Research_Design.md`.
 Where the evaluations disagreed, the resolution and its reason are in
 Appendix A; every headline count was re-run against the database while this
-was written. Nothing here has been implemented; the throwaway probes named in
-Appendix C are not the implementation.*
+was written. The throwaway probes named in Appendix C are not in the
+repository.*
 
 ---
 

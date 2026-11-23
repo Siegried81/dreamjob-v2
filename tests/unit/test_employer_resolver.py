@@ -777,3 +777,144 @@ async def test_an_ambiguous_site_keeps_the_anomaly_the_rung_reported(db):
     assert result.verdict.reason == resolver.REASON_AMBIGUOUS
     assert result.needs_review is True
     assert "Canadian French" in repo.read_verdict(company_id)["anomalies"]
+
+
+# ---------------------------------------------------------------------------
+# The free signals and the register meet: the queue, the union band, "which one?"
+# ---------------------------------------------------------------------------
+
+
+def _postings(company_id: str, n: int, text: str) -> None:
+    for index in range(n):
+        insert_row(
+            "vacancy",
+            {
+                "company_id": company_id,
+                "title": f"Role {index}",
+                "description": text,
+                "collected_at": utcnow(),
+            },
+        )
+
+
+AGENCY_TEXT = (
+    "Voor onze klant, een groeiend familiebedrijf, zoeken wij een medewerker. "
+    "Onze klant biedt een vaste job na een proefperiode via interim."
+)
+
+
+async def test_a_pass_walks_the_most_suspected_employer_first(db):
+    """Queue order is suspicion first, then vacancy count.
+
+    The queue is still chosen by vacancy count; within it the detector's
+    ``work_queue`` decides who is walked first, so a pass that stops early has
+    covered the suspected agencies before the large plain employer.
+    """
+    big = _company("PLAIN BIG NV", vacancies=0)
+    _postings(big, 9, "We build bridges and employ our own engineers in Gent.")
+    agency = _company("SMALL AGENCY BV", vacancies=0)
+    _postings(agency, 5, AGENCY_TEXT)
+
+    walked: list[str] = []
+
+    async def record(ctx: resolver.RungContext):
+        walked.append(ctx.name)
+        return resolver.RungOutcome(resolver.OUTCOME_HANDED_DOWN)
+
+    ladder = [resolver.Rung(1, resolver.RUNG_REGISTRY, resolver.METHOD_REGISTRY, record)]
+    await resolver.resolve_many(10, concurrency=1, ladder=ladder)
+
+    assert walked == ["SMALL AGENCY BV", "PLAIN BIG NV"]
+
+
+async def test_the_registers_signal_is_merged_into_the_stored_band(db):
+    """R1 joins the free signals and the band is recomputed over the union."""
+    registry = pytest.importorskip("dreamjob.pipeline.employer_registry_rung")
+    from dreamjob.pipeline import employer_signals
+
+    company_id = _company("QUIET HR BV", vacancies=0)
+    _postings(company_id, 3, "Een gevarieerde job in een vlotte organisatie in Gent.")
+    free = employer_signals.score_employer(company_id)
+
+    outcome = registry.RegistryOutcome(
+        company_id=company_id, company_name="QUIET HR BV", decision="matched",
+        legal_id="0123456789", staffing_codes=("78200",),
+        activities=[registry.Activity("nsso", "2025", "78.200", "Temporary employment agency")],
+    )
+    resolver.register_rung(resolver.RUNG_REGISTRY, _stub(outcome, calls=[], name="registry"))
+
+    await resolver.resolve_employer_kind(company_id)
+
+    stored = repo.read_signals(company_id)
+    assert stored["score"] > free.score, "R1 adds points the adverts alone did not have"
+    assert stored["tier"] != free.band
+    ids = {item["signal"] for item in from_json(stored["signals"], [])}
+    assert "R1" in ids
+
+
+async def test_a_resolved_register_with_no_staffing_code_lowers_the_stored_score(db):
+    registry = pytest.importorskip("dreamjob.pipeline.employer_registry_rung")
+    from dreamjob.pipeline import employer_signals
+
+    company_id = _company("CLIENT VOICE BV", vacancies=0)
+    _postings(company_id, 4, AGENCY_TEXT)
+    free = employer_signals.score_employer(company_id)
+    outcome = registry.RegistryOutcome(
+        company_id=company_id, decision="matched", legal_id="0123456789",
+    )
+    resolver.register_rung(resolver.RUNG_REGISTRY, _stub(outcome, calls=[], name="registry"))
+
+    await resolver.resolve_employer_kind(company_id)
+
+    stored = repo.read_signals(company_id)
+    assert stored["score"] < free.score
+    assert "D6" in {item["signal"] for item in from_json(stored["signals"], [])}
+
+
+async def test_an_ambiguous_register_name_is_stored_with_both_rows(db):
+    registry = pytest.importorskip("dreamjob.pipeline.employer_registry_rung")
+    from dreamjob.adapters.registries.kbo import EntityMatch
+
+    company_id = _company("HOUSE OF RECRUITMENT SOLUTIONS BV", vacancies=3)
+    match = EntityMatch(
+        decision="ambiguous", name="HOUSE OF RECRUITMENT SOLUTIONS", rule="exact_name",
+        candidates=(
+            {"number": "0111.111.111", "municipality": "Gent"},
+            {"number": "0222.222.222", "municipality": "Brugge"},
+        ),
+    )
+    outcome = registry.RegistryOutcome(
+        company_id=company_id, decision="ambiguous", match=match, hand_down="two entities",
+    )
+    resolver.register_rung(resolver.RUNG_REGISTRY, _stub(outcome, calls=[], name="registry"))
+
+    result = await resolver.resolve_employer_kind(company_id)
+
+    assert result.verdict.kind == resolver.KIND_CANNOT_TELL
+    row = repo.read_verdict(company_id)
+    assert row["reason"] == "registry_ambiguous"
+    assert "Two registered companies" in row["summary"]
+    identity = from_json(row["identity_evidence"], {})
+    assert [c["municipality"] for c in identity["candidates"]] == ["Gent", "Brugge"]
+
+
+async def test_the_kind_payload_shows_what_the_free_signals_said(db):
+    from types import SimpleNamespace
+
+    from dreamjob.api.routers import employers
+    from dreamjob.db.repositories import employer_product as run_repo
+
+    company_id = _company("SMALL AGENCY BV", vacancies=0)
+    _postings(company_id, 5, AGENCY_TEXT)
+    await resolver.resolve_employer_kind(
+        company_id, ladder=[resolver.Rung(1, resolver.RUNG_SIGNALS, resolver.METHOD_SIGNALS,
+                                          resolver.signals_rung, can_establish=False)]
+    )
+    resolver.register_rung(resolver.RUNG_SIGNALS, None)
+
+    payload = employers._tag_payload(
+        run_repo.company(company_id), SimpleNamespace(id="seeker", locale="en")
+    )
+
+    assert set(payload["free_signals"]) == {"hint", "tier", "score", "priority"}
+    assert payload["free_signals"]["priority"] is not None

@@ -210,13 +210,6 @@ def _iso_date(value: Any) -> str | None:
     return parsed.astimezone(UTC).isoformat(timespec="seconds")
 
 
-def _days_since(value: str | None, now: datetime) -> float | None:
-    stamp = _iso_date(value)
-    if not stamp:
-        return None
-    return (now - datetime.fromisoformat(stamp)).total_seconds() / 86_400.0
-
-
 # ---------------------------------------------------------------------------
 # Detection (FR-225)
 # ---------------------------------------------------------------------------

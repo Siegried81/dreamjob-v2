@@ -1140,28 +1140,6 @@ async def _price_in_eur(facts: list[fx.FilingFacts], egress: Any) -> list[dict[s
     return await attach_fx(facts, egress=egress)
 
 
-async def analyse_companies(
-    company_ids: list[str],
-    *,
-    egress: Any = None,
-    llm: LLMClient | None = None,
-    years: int = DEFAULT_YEARS,
-    collect: bool = True,
-) -> list[dict[str, Any]]:
-    """Collect and analyse a batch; used by the financial job worker (FR-185)."""
-    out: list[dict[str, Any]] = []
-    for company_id in company_ids:
-        company = repo.company(company_id)
-        if not company:
-            continue
-        if collect:
-            await collect_company_financials(
-                company, egress=egress, llm=llm, years=years
-            )
-        out.append(analyse_company(company_id, llm=llm, years=years))
-    return out
-
-
 # ---------------------------------------------------------------------------
 # Stage re-run (NFR-603)
 # ---------------------------------------------------------------------------

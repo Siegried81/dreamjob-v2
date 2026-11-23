@@ -67,11 +67,11 @@ of taking those constraints seriously rather than working around them.
    (or local)     ATS / sites     NBB, KBO…     Resend · M365 (read)
 ```
 
-**Scale** (re-derived 2026-11-06; `backend/**/*.py`, `frontend/**/*.{js,jsx}`,
-`tests/**/*.py`). 246 Python modules / 128,803 lines · 147 JS modules /
-45,056 lines · 143 test files / 70,055 lines · 46 migrations · 24 versioned
-prompt templates · 36 declared source adapters, 30 of them enabled. The
-offline pass count is in `README.md`, which is where it is re-derived.
+**Scale** (`backend/**/*.py`, `frontend/**/*.{js,jsx}`, `tests/**/*.py`).
+247 Python modules / 128,964 lines · 147 JS modules / 45,056 lines · 152 test
+files / 71,845 lines · 46 migrations · 24 versioned prompt templates · 36
+declared source adapters, 30 of them enabled. The offline pass count is in
+`README.md`.
 
 ---
 
@@ -312,13 +312,7 @@ the screens; `?` opens the panel anywhere.
 
 ## 6. Deployment
 
-```bash
-pip install -r requirements.txt
-cd frontend && npm install && cd ..
-cp .env.example .env
-PYTHONPATH=backend python3 -m dreamjob.security.crypto --generate-key   # master key + session secret, after the install
-./scripts/dev.sh                       # API :8000, SPA :5173 with /api proxied
-```
+The quickstart is in the README; every other setting is in section 12.
 
 Production is the same process serving the built SPA from `frontend/dist`.
 Migrations run at startup. The **monitoring scheduler autostarts inside the API
@@ -404,10 +398,10 @@ profiled as if it were the client.
 
 ## 9. Testing
 
-**2,538 tests collected, 70,843 lines across 146 files** (`tests/**/*.py`,
-re-counted 2026-11-20; `-m 'not llm and not load'` deselects 14, leaving 2,524,
-of which the CI command's `tests/unit tests/integration` runs 2,490.
-The offline pass count is in `README.md`, which is where it is re-derived).
+**2,578 tests collected, 71,845 lines across 152 files** (`tests/**/*.py`;
+`-m 'not llm and not load'` deselects 14, leaving 2,564, of which the CI
+command's `tests/unit tests/integration` runs 2,530. The offline pass count is
+in `README.md`).
 Each runs against a migrated temporary database and without network access; LLM
 and HTTP paths are stubbed or skipped, and the network and load tests are
 deselected. A Playwright e2e harness and persona generator
@@ -472,6 +466,243 @@ python3 scripts/traceability.py
 
 The one uncited requirement is the DPIA itself (NFR-304), a document rather than
 a code path. The known limitations are listed in the Functional Design, §12.
+
+
+## 12. Setup, configuration and operation
+
+Moved here from the README: everything an operator needs beyond the quickstart.
+
+### 12.1 Sources
+
+| Type | Count | Sources |
+|---|---|---|
+| ATS | 9 | Greenhouse, Lever, SmartRecruiters, Ashby, Recruitee, Personio, Workday, Teamtailor, Workable |
+| Job boards | 15 | EURES, VDAB, Actiris, Jobat, StepStone, Indeed, Welcome to the Jungle, Arbeitnow, generic HTML, Adzuna, Himalayas, Hacker News "Who is hiring", Jobicy, RemoteOK, Remotive |
+| Registries | 6 | NBB, KBO/BCE, Companies House, KvK, SEC EDGAR, recherche-entreprises (FR) |
+| Directories | 1 | OpenCorporates |
+| Website | 1 | bounded company-site crawler |
+| News / events | 3 | RSS newsrooms, event radar, social event calendars |
+| Compensation | 1 | Eurostat Structure of Earnings Survey |
+
+The counts above are rows in `source_catalogue`: **36 declared, 30 enabled**.
+Indeed, StepStone and SmartRecruiters ship disabled until an administrator
+acknowledges their terms of service (IR-101); `board.jobat`, `board.remotive`
+and the social-event adapter (`events.social`) are enabled but also await that
+acknowledgement, and `board.generic`,
+`board.vdab` and `board.wttj` are declared and disabled.
+
+**Contact discovery** does not stop at the company home page. It reads the
+pages the home page links to, the site's **sitemap**, **schema.org JSON-LD**
+and **`security.txt`**; it infers the domain's address convention from observed
+addresses; and, for the large corporate sites that answer every fetch with an
+F5/Cloudflare challenge, it can query a **search API** (Brave, Bing or Google
+CSE, set it on the Contacts screen, *Search provider* tab, administrators
+only; off until a key is supplied, because the engines disallow their HTML
+search endpoint). The stored key is never sent back to the browser. The same
+provider, once switched on, also serves profile enrichment's searches. A blocked site is recorded as
+`blocked`, not reported as having no address.
+
+### 12.2 Optional setup
+
+**Browser automation**: for LinkedIn and Glassdoor, which block scrapers, and
+for ATS form pre-fill. You launch your own browser and log in; the system
+attaches and never sees your credentials.
+
+```bash
+./scripts/browser.sh          # dedicated profile, remote debugging port
+```
+
+> LinkedIn's user agreement prohibits automated access **including through a
+> session you logged into yourself**. Your account may be restricted. Dream Job
+> shows this warning before the first run and refuses to proceed until you
+> acknowledge it. The decision is yours to make knowingly.
+
+**Sending mail**: one of three backends:
+
+- *Gmail OAuth*, set `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET`, then connect on
+  the Mail setup screen. Replies land in your own inbox and are detected.
+- *Resend*, set `RESEND_API_KEY` and `DREAMJOB_MAIL_FROM` (an address on a domain you
+  verified at Resend; it cannot send as a Gmail address). No inbox, so replies
+  are recorded by webhook or entered by hand. Without a sender it reports itself
+  unavailable.
+- *IMAP + SMTP* (`imap_basic`), any mailbox that issues an application
+  password (Yahoo, iCloud, ...), connected through `POST /api/mail/imap/connect`;
+  replies land in that inbox. The Mail screen has no form for it yet.
+
+**Google Calendar**: optional, for checking proposed interview slots against
+your diary and creating the event. Set `GOOGLE_CALENDAR_CLIENT_ID`,
+`GOOGLE_CALENDAR_CLIENT_SECRET` and list `GOOGLE_CALENDAR_REDIRECT_URI` on the
+OAuth client, then `POST /api/pipeline/calendar/authorize` and open the URL it
+returns. There is no button for it on a screen yet.
+
+**Reading a Microsoft 365 / Outlook.com inbox**: read-only, for reply and
+bounce detection: register an app as described in
+[docs/M365_Mail_Setup.md](docs/M365_Mail_Setup.md), set `M365_CLIENT_ID`, then
+connect through `GET /api/mail/m365/authorize`. It never sends.
+
+`DREAMJOB_MAIL_DRY_RUN` defaults to `true`: the whole path runs, recipient,
+guard rails, MIME with the CV attached, and stops one step short of the wire.
+Arming a real send is a deliberate change of that setting plus a restart.
+
+**A local model**: for the privacy-sensitive steps (composite profile, CV,
+motivation document), any OpenAI-compatible endpoint:
+
+```bash
+DREAMJOB_LOCAL_LLM_BASE_URL=http://127.0.0.1:11434/v1
+DREAMJOB_LOCAL_LLM_MODEL=llama3.1
+DREAMJOB_LOCAL_LLM_TASKS=profile,cv,motivation
+```
+
+**Semantic search**: optional embeddings, inert when unset:
+
+```bash
+DREAMJOB_EMBEDDINGS_MODEL=text-embedding-3-small
+DREAMJOB_EMBEDDINGS_BASE_URL=...
+python3 scripts/build_semantic_index.py
+```
+
+Once the index is built, `GET /api/opportunities/semantic?q=...` ranks the
+seeker's own opportunities by meaning. Scoring ignores the index unless
+`DREAMJOB_SEMANTIC_SCORING=true`, which adds the vacancy's similarity to the
+dream job as a fifth of the mechanical dream-fit sub-score (scores computed
+with and without it are not comparable).
+
+**Near-real-time vacancies**: on by default. The scheduler's `vacancy_refresh`
+task runs every 10 minutes (`DREAMJOB_VACANCY_REFRESH_SECONDS`): it re-reads a
+bounded, round-robin slice of the ATS boards behind existing ranked lists, and
+each new posting is added to every following campaign under its directives,
+scored, and announced once as a `new_vacancy` notification. Vacancy fetches
+treat a cached board as fresh for one hour (`DREAMJOB_VACANCY_CACHE_TTL_SECONDS`);
+after that it is revalidated, which costs a 0-byte 304 when nothing changed.
+
+**Old vacancies are deleted.** Collection stores every posting it reads, but
+only the ones a campaign retains become opportunities. Once a day the
+`vacancy_purge` task deletes the vacancies no opportunity uses and nobody has
+seen for the staleness window (7 days, never less), with their provenance and
+embeddings. A vacancy behind an opportunity is kept at any age.
+`DREAMJOB_VACANCY_PURGE_SECONDS=0` turns it off. To see what it would remove,
+or to clear everything unlinked at once:
+
+    PYTHONPATH=backend .venv/Scripts/python.exe scripts/purge_unlinked_vacancies.py
+    PYTHONPATH=backend .venv/Scripts/python.exe scripts/purge_unlinked_vacancies.py --days 0 --apply
+
+The first line only counts. `--apply` backs the database up next to itself first.
+
+To discover beyond the boards already followed, turn on the continuous cycle in
+**Admin → Continuous** with a 300 s interval. The UI receives updates live
+through `/api/events/stream`.
+
+The scheduler runs inside the API process and stops with it. On Windows, if it
+must survive API restarts, set `DREAMJOB_SCHEDULER_ENABLED=0` and run
+`python -m dreamjob.monitoring.scheduler --once` from Task Scheduler instead.
+
+To know whether the job-alert mails in your mailbox can be deleted, run
+`PYTHONPATH=backend python scripts/ingest_alerts.py`: it backs every alert mail
+of the window up as `.eml` under `data/alerts_backup/`, runs one pass, and ends
+with one line naming the cursor date before which deleting is safe.
+
+### 12.3 With Docker (Docker Desktop)
+
+One container holds the backend and the built React frontend:
+
+```bash
+cp .env.example .env          # fill DREAMJOB_MASTER_KEY, DREAMJOB_SESSION_SECRET and an LLM key
+docker compose up --build     # builds the image "dreamjob-v2:local", then starts it
+```
+
+Open http://localhost:8000 (use `localhost`, not `127.0.0.1`: passkeys refuse an IP).
+The container mounts the host's `data/` and `logs/`, so it sees the same database,
+accounts and documents as the dev server. **Run one or the other, never both**:
+SQLite locking is not reliable across the Windows/Docker boundary, and two
+schedulers would collect into the same database. The container is never restarted
+on its own (`restart: "no"`). The port is bound to 127.0.0.1 only and mail stays
+in dry-run unless you change `DREAMJOB_MAIL_DRY_RUN` in `docker-compose.yml`.
+Browser automation attaches to a Chrome on the host over CDP, which the container
+cannot reach by default: use the non-Docker setup for that feature.
+
+### 12.4 Configuration
+
+All runtime configuration is read once from `.env` / the environment into a
+frozen settings object, so the Admin screen can show what is in force; the only
+direct `os.environ` reads are optional registry API keys,
+`DREAMJOB_SCHEDULER_AUTOSTART` and `DREAMJOB_APPLY_ALLOW_SEND`. Groups include:
+
+- **Core**: `DREAMJOB_ENV`, `DREAMJOB_HOST`, `DREAMJOB_PORT`, `DREAMJOB_DATA_DIR`, `DREAMJOB_DB_PATH`
+- **Keys**: `DREAMJOB_MASTER_KEY`, `DREAMJOB_SESSION_SECRET`
+- **Owner**: `DREAMJOB_OWNER_EMAIL`, `DREAMJOB_OWNER_NAME`, read by `scripts/bootstrap.py` and `scripts/backfill_scoring.py`
+- **LLM**: `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, cheap/strong model names, `DREAMJOB_LOCAL_LLM_*`, `DREAMJOB_EMBEDDINGS_*`, budget and cost
+- **Mail**: `DREAMJOB_MAIL_BACKEND`, `DREAMJOB_MAIL_DRY_RUN`, `GMAIL_*`, `M365_*`, `RESEND_API_KEY`, `DREAMJOB_SEND_DAILY_CAP`, send window and interval
+- **Egress**: user agent and the optional `DREAMJOB_CRAWLER_CONTACT`, per-domain RPS, concurrency, cache and negative-cache TTL, `DREAMJOB_VACANCY_CACHE_TTL_SECONDS` (freshness window for vacancy fetches), robots and crawl-delay flags, raw-document retention
+- **Calendar**: `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`, `GOOGLE_CALENDAR_REDIRECT_URI`
+- **Browser**: `DREAMJOB_CDP_URL`, profile directory, human pacing bounds
+- **Scheduler**: `DREAMJOB_SCHEDULER_ENABLED`, `DREAMJOB_SCHEDULER_TICK_SECONDS`, `DREAMJOB_VACANCY_REFRESH_SECONDS` (0 turns the vacancy refresh off), `DREAMJOB_VACANCY_PURGE_SECONDS` (0 turns the vacancy purge off)
+- **Observability**: log directory, level, format, rotation, slow-request and slow-query thresholds
+
+### 12.5 Adding a source
+
+Adding a source is one file: subclass `SourceAdapter`, implement
+`plan / fetch / parse / normalise`, decorate with `@register_adapter`. It appears
+in the catalogue at the next boot. A language is content only, the prompt
+templates and `help/content.js`.
+
+### 12.6 Operator tooling
+
+```bash
+python3 scripts/bootstrap.py                 # schema + first administrator
+python3 scripts/traceability.py              # requirement-to-file matrix
+python3 scripts/build_semantic_index.py      # build the semantic index (SQLite table, or Qdrant with DREAMJOB_SEMANTIC_BACKEND=qdrant)
+
+# Widen the company inventory (run by hand):
+python3 scripts/import_board_registry.py     # public ATS boards, monthly
+python3 scripts/resolve_employer_seed.py --dry-run   # named large employers
+python3 scripts/import_register_bulk.py      # bulk company register seed
+python3 scripts/ingest_kbo.py                # KBO staging
+python3 scripts/mine_compensation.py         # salary corpus from postings
+python3 scripts/normalise_corpus.py          # normalise collected corpus
+python3 scripts/backfill_scoring.py          # rescore after a model change
+python3 scripts/e2e_persona.py               # end-to-end persona run
+```
+
+The board registry is built from public URL indexes and shaped like them:
+Personio and Recruitee SMEs, Teamtailor's Nordic base, and the Greenhouse and
+Ashby boards named in Hacker News threads. The large employers a Benelux search
+is judged on, the consultancies, the integrators, the telcos, run Workday or
+their own careers site and appear in none of those indexes. The seed script
+closes that gap from `backend/dreamjob/pipeline/data/employer_seed.json`: it
+reads each named employer's own careers page and confirms the board with one
+request before storing it. No slug is ever guessed.
+
+### 12.7 Data protection in short
+
+The product processes two kinds of personal data and treats them differently.
+
+**Yours.** Encrypted at rest with a key derived for your account alone. Fields
+you mark *do not disclose* are excluded from every generated document and
+stripped before any prompt leaves the machine. Full export and complete erasure
+are one call each, and erasure derives its table list from the live schema, so
+a table added later cannot be silently missed.
+
+**Hiring contacts'.** Only professional contact details are stored, kept to what
+a professional introduction needs. Every introduction email offers a way to
+object, and **an objection blocks that address permanently, for everyone** on the
+installation, enforced in a database view rather than only in the interface.
+Contacts gathered through browser automation expire with the campaign that
+collected them (30 days by default) and are never shared between job seekers.
+
+DeepSeek processes data outside the EU. You are told before any profile data is
+sent, and your consent is recorded (CR-410). Privacy-sensitive steps can be
+routed to a local model instead. See [DPIA.md](docs/DPIA.md).
+
+### 12.8 Help inside the product
+
+The **Where I am** screen is the map: sixteen stages across the five phases,
+each showing what is done, what is running and, when something is blocked ,
+*what would unblock it*. Every stage links to the screen that advances it, and a
+one-line version of the map sits at the top of every working screen.
+
+Press **`?`** on any screen for its instructions, or click the **?** beside any
+label for that concept. 21 screens documented, 142 glossary terms, 310 inline
+tips: the help is part of the product, not an afterthought.
 
 ---
 

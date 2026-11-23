@@ -103,8 +103,8 @@ sys.path.insert(0, str(REPO_ROOT / "backend"))
 
 DEFAULT_OUT = REPO_ROOT / "backend" / "dreamjob" / "pipeline" / "data" / "board_registry.json"
 
-#: Fallback only; the real value comes from ``DREAMJOB_USER_AGENT`` (FR-182).
-USER_AGENT = "DreamJobBot/0.1 (+https://stepvda.net/dreamjob; contact stephane@stepvda.com)"
+#: Fallback only; the real value comes from the settings (FR-182).
+USER_AGENT = "DreamJobBot/0.1"
 
 #: The two hosts whose robots.txt this script knowingly does not follow, for
 #: the reasons set out in the module docstring.  Nothing may be added here
@@ -686,11 +686,6 @@ def load_document(path: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {"boards": payload}
 
 
-def load_registry(path: Path) -> list[Board]:
-    rows = load_document(path).get("boards") or []
-    return [Board.from_json(r) for r in rows if isinstance(r, dict)]
-
-
 def registry_document(boards: list[Board], provenance: dict[str, Any]) -> dict[str, Any]:
     by_vendor: dict[str, int] = {}
     by_source: dict[str, int] = {}
@@ -854,7 +849,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from dreamjob.config import get_settings
 
-        user_agent = get_settings().user_agent or USER_AGENT
+        user_agent = get_settings().user_agent_header or USER_AGENT
     except Exception:  # noqa: BLE001 - the importer must run without a configured install
         user_agent = USER_AGENT
 

@@ -7,7 +7,7 @@
  * - Gmail sends as the job seeker and, because the answers arrive in the job
  *   seeker's own inbox, it is the only backend that can detect replies and
  *   bounces at all (FR-326, section 2.4).
- * - Resend is a one-way relay from stepvda.com. It has no mailbox, so delivery
+ * - Resend is a one-way relay. It has no mailbox, so delivery
  *   news arrives as a webhook and replies are never seen by Dream Job.
  *
  * NFR-204 also asks that the granted access be visible and revocable from the

@@ -657,10 +657,6 @@ async def probe(url: str | None = None, *, timeout: float = 5.0) -> CdpStatus:
     return status
 
 
-async def is_available(url: str | None = None) -> bool:
-    return (await probe(url)).connected
-
-
 DRIVERS: tuple[str, ...] = ("cdp", "persistent")
 FAMILIES: tuple[str, ...] = ("chromium", "firefox")
 

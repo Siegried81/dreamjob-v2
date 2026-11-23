@@ -251,10 +251,6 @@ class JobContext:
         with self._progress_lock:
             return self._take_pending()
 
-    def flush_progress(self) -> None:
-        values = self.drain_progress()
-        if values:
-            update_row("job_run", self.job_id, values)
 
     def save_checkpoint(self, **kwargs: Any) -> None:
         """Persist resume state (NFR-401).  Called after each unit of work.
@@ -640,12 +636,6 @@ class JobRunner:
     def status(job_id: str) -> dict | None:
         return query_one("SELECT * FROM job_run WHERE id = ?", (job_id,))
 
-    @staticmethod
-    def for_campaign(campaign_id: str) -> list[dict]:
-        return query_all(
-            "SELECT * FROM job_run WHERE campaign_id = ? ORDER BY created_at DESC",
-            (campaign_id,),
-        )
 
     async def resume_orphans(self) -> int:
         """On startup, requeue jobs a crash left unfinished (NFR-401).

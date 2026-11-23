@@ -217,25 +217,6 @@ def facet_counts(job_seeker_id: str, *, campaign_id: str | None = None) -> dict[
     return {key: int(row[key] or 0) for key in ("total", *FILTERS)}
 
 
-def package_ids_for(
-    job_seeker_id: str,
-    *,
-    campaign_id: str | None = None,
-    filters: list[str] | None = None,
-    search: str | None = None,
-    limit: int = 1000,
-) -> list[str]:
-    """Every live package id behind the current filter - "select all" (FR-324)."""
-    where, params = _where(
-        job_seeker_id, campaign_id=campaign_id, filters=filters, search=search
-    )
-    rows = query_all(
-        f"SELECT p.id AS package_id {_FROM} {where} AND p.id IS NOT NULL {_ORDER} LIMIT ?",
-        (*params, limit),
-    )
-    return [row["package_id"] for row in rows]
-
-
 def job(job_seeker_id: str, opportunity_id: str) -> dict[str, Any] | None:
     """One row of the same shape, for the detail pane's header."""
     row = query_one(
@@ -362,6 +343,21 @@ def set_selection_status(job_seeker_id: str, opportunity_id: str, status: str) -
         "UPDATE apply_selection SET status = ?, updated_at = ? "
         "WHERE job_seeker_id = ? AND opportunity_id = ?",
         (status, utcnow(), job_seeker_id, opportunity_id),
+    )
+
+
+def set_selection_status_for_package(job_seeker_id: str, package_id: str, status: str) -> None:
+    """Move the selection row behind an application package, whichever way it is reached.
+
+    Approval and dispatch work on package ids, so the opportunity is read from
+    the package.  A package with no selection row (generated from the ranked
+    list, not the Apply Browser) matches nothing and changes nothing.
+    """
+    execute(
+        "UPDATE apply_selection SET status = ?, updated_at = ? "
+        "WHERE job_seeker_id = ? AND opportunity_id = "
+        "(SELECT opportunity_id FROM application_package WHERE id = ? AND job_seeker_id = ?)",
+        (status, utcnow(), job_seeker_id, package_id, job_seeker_id),
     )
 
 
@@ -933,18 +929,6 @@ def vacancies_with_contact() -> dict[str, int]:
 
 def domain_probe(domain: str) -> dict[str, Any] | None:
     return query_one("SELECT * FROM apply_domain_probe WHERE domain = ?", (domain.lower(),))
-
-
-def domain_probes(domains: list[str]) -> dict[str, dict[str, Any]]:
-    """Every cached verdict for a batch, so the pass asks the table once."""
-    if not domains:
-        return {}
-    marks = ", ".join("?" for _ in domains)
-    rows = query_all(
-        f"SELECT * FROM apply_domain_probe WHERE domain IN ({marks})",
-        tuple(d.lower() for d in domains),
-    )
-    return {row["domain"]: row for row in rows}
 
 
 def record_domain_probe(

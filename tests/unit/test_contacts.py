@@ -21,7 +21,7 @@ from typing import Any
 
 import pytest
 from dreamjob.config import get_settings
-from dreamjob.db.connection import insert_row, query_all, query_one, utcnow
+from dreamjob.db.connection import execute, insert_row, query_all, query_one, utcnow
 from dreamjob.db.repositories import contacts as repo
 from dreamjob.jobs.runner import runner
 from dreamjob.pipeline import contact_backup, introductions
@@ -779,6 +779,45 @@ def test_browser_contacts_are_campaign_scoped_and_swept() -> None:
     assert report["contacts"] == 1
     assert repo.get_contact(contact_id) is None
     assert repo.get_contact(kept_id) is not None
+
+
+def test_finishing_a_campaign_restamps_its_browser_records_from_the_end() -> None:
+    """NFR-303: the deadline is the campaign's end plus the grace period.
+
+    A record collected while the campaign runs is stamped from "now", since the
+    end is not known yet.  When the campaign finishes those stamps are
+    recomputed from its real end, so they neither expire before the promised
+    date nor keep an early guess.
+    """
+    from datetime import datetime, timedelta
+
+    from dreamjob.db.repositories import browser as browser_repo
+    from dreamjob.db.repositories import campaigns as campaign_repo
+
+    ids = _seed()
+    contact_id, _ = repo.upsert_contact(
+        {
+            "company_id": ids["company_id"],
+            "full_name": "Piet Janssens",
+            "linkedin_url": "https://www.linkedin.com/in/pietjanssens",
+            "source": "linkedin",
+            "collected_at": utcnow(),
+            **pipeline.storage_scope("browser", ids["campaign_id"]),
+        }
+    )
+    execute(
+        "UPDATE contact SET retention_until = ? WHERE id = ?",
+        ("2001-01-01T00:00:00+00:00", contact_id),
+    )
+
+    campaign_repo.set_stage(ids["campaign_id"], "ranked", "completed")
+
+    stamped = repo.get_contact(contact_id)["retention_until"]
+    finished = query_one("SELECT finished_at FROM campaign WHERE id = ?", (ids["campaign_id"],))
+    expected = datetime.fromisoformat(finished["finished_at"]) + timedelta(
+        days=browser_repo.retention_grace_days()
+    )
+    assert abs((datetime.fromisoformat(stamped) - expected).total_seconds()) < 5
 
 
 def test_retention_worker_is_registered_for_the_scheduler() -> None:

@@ -695,10 +695,6 @@ def set_validation(contact_id: str, result: str, detail: dict | None = None) -> 
     )
 
 
-def set_confidence(contact_id: str, confidence: float) -> None:
-    update_row("contact", contact_id, {"confidence": round(float(confidence), 3)})
-
-
 def delete_contact(contact_id: str) -> int:
     return execute("DELETE FROM contact WHERE id = ?", (contact_id,))
 
@@ -920,10 +916,6 @@ def cache_validation(email: str, result: str, detail: dict, expires_at: str) -> 
         },
         ["email"],
     )
-
-
-def clear_validation_cache(email: str) -> int:
-    return execute("DELETE FROM email_validation_cache WHERE email = ?", (email.strip().lower(),))
 
 
 def domain_state(domain: str) -> dict | None:

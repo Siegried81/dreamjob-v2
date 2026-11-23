@@ -1266,7 +1266,7 @@ def test_mail_setup_reports_that_neither_backend_can_send(page, signed_in) -> No
         screenshot(page, "gmail is not connected")
 
     with step(page, "Resend reports a missing key as a state, not a fault (FR-325)"):
-        resend = page.locator(".card").filter(has_text="Resend — relay from stepvda.com").first
+        resend = page.locator(".card").filter(has_text="Resend relay").first
         assert resend.get_by_text("API key not available yet", exact=True).is_visible()
         assert resend.get_by_text(
             "Nothing is broken — the key simply does not exist yet."

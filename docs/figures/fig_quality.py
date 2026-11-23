@@ -22,11 +22,10 @@ from __future__ import annotations
 
 import math
 
-import matplotlib.pyplot as plt
-from matplotlib.patches import FancyArrowPatch
-
 import facts
+import matplotlib.pyplot as plt
 import style
+from matplotlib.patches import FancyArrowPatch
 from style import (
     ACCENT,
     INK,

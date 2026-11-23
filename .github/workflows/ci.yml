@@ -1,5 +1,5 @@
 # Continuous integration: the same commands the README documents for a
-# contributor's machine (section "Development"), run on every pull request and
+# contributor's machine (section "Tests"), run on every pull request and
 # on every push to main.  Nothing here is CI-specific, so a red job is
 # reproducible locally with the identical command - which is the point of
 # mirroring the README rather than inventing a second set of invocations.

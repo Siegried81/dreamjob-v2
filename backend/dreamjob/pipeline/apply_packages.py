@@ -62,6 +62,7 @@ from dreamjob.config import get_settings
 from dreamjob.db.connection import from_json, utcnow
 from dreamjob.db.repositories import admin as admin_repo
 from dreamjob.db.repositories import applications as repo
+from dreamjob.db.repositories import apply as apply_repo
 from dreamjob.db.repositories import contacts as contacts_repo
 from dreamjob.db.repositories import dispatch as dispatch_repo
 from dreamjob.documents import internship, intro_email
@@ -332,6 +333,7 @@ def generate_package(
             "generated or regenerated for them."
         )
 
+    apply_repo.set_selection_status(job_seeker_id, opportunity_id, "generating")
     llm: LLMClient | None = None
     reason: str | None = "Model use was switched off for this run."
     if opts.use_llm:
@@ -365,6 +367,7 @@ def generate_package(
     )
     spend = _spend_since(job_seeker_id, entities, before)
     package = _record(job_seeker_id, package, spend, plan, actor)
+    apply_repo.set_selection_status(job_seeker_id, opportunity_id, "ready")
     return _result(package, reused=False, spend=spend, degradation=plan.reasons)
 
 
@@ -963,6 +966,7 @@ def _generate_one(
         return result.as_dict()
     except Exception as exc:  # noqa: BLE001 - one bad package must not stop the batch
         log.exception("Package generation failed for opportunity %s", opportunity_id)
+        apply_repo.set_selection_status(job_seeker_id, opportunity_id, "failed")
         return PackageResult(
             opportunity_id=opportunity_id,
             package_id=None,

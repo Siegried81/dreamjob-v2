@@ -127,7 +127,7 @@ def _response_cache_put(
 
 
 def clear_response_cache() -> None:
-    """Drop the in-process response cache (used by tests and the admin screen)."""
+    """Drop the in-process response cache (tests use it to start from a clean slate)."""
     with _RESPONSE_CACHE_LOCK:
         _RESPONSE_CACHE.clear()
 

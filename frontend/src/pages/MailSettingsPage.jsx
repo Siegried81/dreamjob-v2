@@ -6,7 +6,7 @@
  *
  *   Which mailbox?   Two backends, and they are genuinely different. Gmail
  *                    sends as the job seeker and can read the answers back;
- *                    Resend is a one-way relay whose key does not exist yet.
+ *                    Resend is a one-way relay that needs a key and a sender.
  *   Under what rules? The FR-325 guard rails, reported rather than offered as
  *                    sliders, with the RK-05 warning about raising them.
  *   What went out?   The FR-326 send log, down to the message id.

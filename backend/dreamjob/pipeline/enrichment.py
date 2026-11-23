@@ -40,7 +40,6 @@ anyway.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 from dataclasses import dataclass, field
@@ -906,11 +905,6 @@ def default_llm(job_seeker_id: str, campaign_id: str | None = None) -> LLMClient
     if not settings.deepseek_api_key and not settings.local_llm_base_url:
         return None
     return LLMClient(campaign_id=campaign_id, job_seeker_id=job_seeker_id)
-
-
-def run_enrichment_sync(job_seeker_id: str, **kwargs: Any) -> EnrichmentReport:
-    """Blocking wrapper for FastAPI's threadpool routes and CLI use."""
-    return asyncio.run(run_enrichment(job_seeker_id, **kwargs))
 
 
 # ---------------------------------------------------------------------------

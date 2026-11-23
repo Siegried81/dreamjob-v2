@@ -468,10 +468,6 @@ class CrawledPage:
     status_code: int = 200
     from_cache: bool = False
 
-    def as_source(self) -> dict[str, Any]:
-        """The `sources` entry FR-222 requires on the standardised profile."""
-        return {"url": self.url, "kind": self.kind, "title": self.title}
-
 
 @dataclass
 class CrawlResult:

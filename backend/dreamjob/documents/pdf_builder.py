@@ -24,7 +24,7 @@ from typing import Any
 from reportlab.graphics.charts.barcharts import VerticalBarChart
 from reportlab.graphics.charts.legends import Legend
 from reportlab.graphics.charts.linecharts import HorizontalLineChart
-from reportlab.graphics.shapes import Drawing, Line, String
+from reportlab.graphics.shapes import Drawing, String
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_JUSTIFY
 from reportlab.lib.pagesizes import A4
@@ -1152,12 +1152,6 @@ def _nice_max(data: Sequence[Sequence[float | None]]) -> float:
         return 1.0
     magnitude = 10 ** (len(str(int(abs(top)))) - 1)
     return float(int(top / magnitude + 1) * magnitude)
-
-
-def rule_line(width: float, colour: colors.Color = RULE) -> Drawing:
-    drawing = Drawing(width, 3)
-    drawing.add(Line(0, 1, width, 1, strokeColor=colour, strokeWidth=0.6))
-    return drawing
 
 
 def format_money(value: float | None, currency: str = "EUR", *, language: str = "en") -> str:

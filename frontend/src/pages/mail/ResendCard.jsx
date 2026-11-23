@@ -1,11 +1,11 @@
 /**
  * The Resend relay (FR-325, FR-326).
  *
- * A one-way transactional relay from stepvda.com, and the screen is explicit
+ * A one-way transactional relay, and the screen is explicit
  * about what that costs: no mailbox means no reply detection, and delivery
  * news arrives as a signed webhook rather than in an inbox.
  *
- * **The API key does not exist yet.** That is a known state of this
+ * **Unconfigured is a known state of this
  * installation, not a fault, so it is stated as one - with the exact steps to
  * take when the key is issued - rather than rendered as a broken backend.
  */
@@ -48,11 +48,11 @@ export default function ResendCard({ resend, isAdmin, onReload }) {
   return (
     <SectionCard
       icon="send"
-      title="Resend — relay from stepvda.com"
+      title="Resend relay"
       phase="phase-0"
       actions={
         <Badge tone={resend?.configured ? 'ok' : 'warn'}>
-          {resend?.configured ? 'API key present' : 'API key not available yet'}
+          {resend?.configured ? 'Ready to send' : 'Not configured'}
         </Badge>
       }
     >
@@ -61,18 +61,19 @@ export default function ResendCard({ resend, isAdmin, onReload }) {
       {!resend?.configured && (
         <div className="alert alert-info">
           <div>
-            <strong>Nothing is broken — the key simply does not exist yet.</strong>
+            <strong>Nothing is broken, the relay is just not set up.</strong>
             <div style={{ marginTop: 4 }}>{resend?.reason}</div>
             <div style={{ marginTop: 10 }}>
               <strong className="small">When you have it:</strong>
               <ol className="help-steps" style={{ marginTop: 4 }}>
                 <li>Create an API key at resend.com/api-keys.</li>
                 <li>
-                  Verify <span className="mono">{domain || 'stepvda.com'}</span> as a sending
+                  Verify <span className="mono">{domain || 'the sender’s domain'}</span> as a sending
                   domain, so {resend?.from_address} is allowed to send.
                 </li>
                 <li>
-                  Put <span className="mono">RESEND_API_KEY=re_…</span> in{' '}
+                  Put <span className="mono">RESEND_API_KEY=re_…</span> and{' '}
+                  <span className="mono">DREAMJOB_MAIL_FROM=you@your-domain</span> in{' '}
                   <span className="mono">.env</span> and restart the API.
                 </li>
                 <li>Point a Resend webhook at the address below and set its signing secret here.</li>

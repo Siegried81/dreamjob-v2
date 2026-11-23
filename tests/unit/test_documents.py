@@ -63,7 +63,7 @@ SECTIONS = {
     "contact": {
         "name": "Stephane van der Aa",
         "headline": "Data & AI",
-        "email": "stephane@stepvda.com",
+        "email": "you@example.com",
         "phone": "+32 470 11 22 33",
         "location": "Gent",
         "linkedin_url": "linkedin.com/in/svda",
@@ -107,7 +107,7 @@ def seed(photo_path: str | None = None) -> dict[str, str]:
     now = utcnow()
     seeker = insert_row(
         "job_seeker",
-        {"email": "stephane@stepvda.com", "display_name": "Stephane van der Aa",
+        {"email": "you@example.com", "display_name": "Stephane van der Aa",
          "locale": "nl", "created_at": now, "updated_at": now},
     )
     version = insert_row(
@@ -1071,7 +1071,7 @@ def test_generation_degrades_without_consent(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _client(seeker_id: str, email: str = "stephane@stepvda.com") -> TestClient:
+def _client(seeker_id: str, email: str = "you@example.com") -> TestClient:
     """Only this slice's router, with authentication stubbed to one job seeker."""
     from dreamjob.api.deps import CurrentSeeker, current_seeker
     from dreamjob.api.routers import applications as router_module

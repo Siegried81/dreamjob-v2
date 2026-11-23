@@ -1286,3 +1286,97 @@ def test_the_recommended_action_never_links_to_a_card_that_does_not_exist() -> N
     assert with_card.action is not None
     assert with_card.action.url.startswith("/pipeline/cards/")
     assert "None" not in with_card.action.url
+
+
+# ---------------------------------------------------------------------------
+# FR-285: the outcome nudge moves the weights the scorer reads
+# ---------------------------------------------------------------------------
+
+
+def _speculative_effect():
+    from dreamjob.postapp.outcomes import Effect
+
+    return Effect(
+        variable="opportunity_kind", value="speculative", outcome="reply", n=20,
+        successes=2, rate=0.1, interval=(0.03, 0.30), baseline=0.3, baseline_n=40,
+        lift=1.0, evidence="suggestive",
+    )
+
+
+def test_the_outcome_nudge_changes_the_weight_the_scorer_reads() -> None:
+    """The nudge used to be filed under column names the scorer never reads.
+
+    ``plausibility`` is the weight key; ``score_plausibility`` is the opportunity
+    column.  The nudge stored the second, started from 1.0 instead of the stored
+    weight, and ``load_weights`` ignored it, so applying the learning changed no
+    ranking.
+    """
+    from dreamjob.pipeline import scoring
+    from dreamjob.postapp import outcomes
+
+    data = seed()
+    before = scoring.load_weights(data["seeker_id"])
+
+    adjustment = outcomes._weights_from([_speculative_effect()], data["seeker_id"])
+    assert set(adjustment["proposed"]) == {"plausibility"}
+
+    analysis = outcomes.Analysis(
+        job_seeker_id=data["seeker_id"], closed=20, effects=[_speculative_effect()],
+        weight_adjustment=adjustment, computed_at="2026-11-20T00:00:00+00:00",
+    )
+    original = outcomes.analyse
+    outcomes.analyse = lambda *args, **kwargs: analysis
+    try:
+        outcomes.apply_learning(data["seeker_id"])
+    finally:
+        outcomes.analyse = original
+
+    after = scoring.load_weights(data["seeker_id"])
+    assert after["plausibility"] > before["plausibility"] * 1.05
+    assert after["plausibility"] < before["plausibility"] * 1.25
+    assert sum(after.values()) == pytest.approx(1.0)
+
+
+def test_repeated_nudges_cannot_leave_the_fr285_band() -> None:
+    from dreamjob.pipeline import scoring
+    from dreamjob.postapp import outcomes
+
+    data = seed()
+    analysis = outcomes.Analysis(
+        job_seeker_id=data["seeker_id"], closed=20, effects=[_speculative_effect()],
+        computed_at="2026-11-20T00:00:00+00:00",
+    )
+    original = outcomes.analyse
+    outcomes.analyse = lambda *args, **kwargs: analysis
+    try:
+        for _ in range(30):
+            analysis.weight_adjustment = outcomes._weights_from(
+                [_speculative_effect()], data["seeker_id"]
+            )
+            outcomes.apply_learning(data["seeker_id"])
+    finally:
+        outcomes.analyse = original
+
+    ceiling = scoring.DEFAULT_WEIGHTS["plausibility"] * scoring.WEIGHT_CEILING_FACTOR
+    assert scoring.load_weights(data["seeker_id"])["plausibility"] <= ceiling + 1e-9
+
+
+def test_regenerating_a_digest_on_the_same_day_refreshes_it_to_the_second() -> None:
+    """One digest per seeker per period, not per clock second.
+
+    The period was matched on its exact start and end, so two generations a
+    second apart (a double click, a busy test run) stored two digests, while the
+    notification they raise already deduplicated on the day.
+    """
+    from dreamjob.db.connection import query_all
+    from dreamjob.monitoring import digest
+
+    data = seed()
+    noon = datetime(2026, 11, 20, 12, 0, 0, tzinfo=UTC)
+    first = digest.generate(data["seeker_id"], end=noon)
+    second = digest.generate(data["seeker_id"], end=noon + timedelta(seconds=1))
+    next_day = digest.generate(data["seeker_id"], end=noon + timedelta(days=1))
+
+    assert second["id"] == first["id"]
+    assert next_day["id"] != first["id"]
+    assert len(query_all("SELECT id FROM digest WHERE job_seeker_id = ?", (data["seeker_id"],))) == 2

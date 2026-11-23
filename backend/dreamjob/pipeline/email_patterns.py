@@ -410,18 +410,8 @@ class NameParts:
     particles: tuple[str, ...] = ()
 
     @property
-    def last_no_particle(self) -> str:
-        return self.last
-
-    @property
     def last_with_particle(self) -> str:
         return "".join(self.particles) + self.last
-
-    def last_variants(self) -> tuple[str, ...]:
-        variants = [self.last]
-        if self.particles:
-            variants.append(self.last_with_particle)
-        return tuple(dict.fromkeys(v for v in variants if v))
 
 
 def split_name(full_name: str) -> NameParts | None:
@@ -488,16 +478,6 @@ def render_pattern(pattern: str, name: NameParts, *, particle: bool = False) -> 
     if not name.first or not last:
         return None
     return builder(name.first, last)
-
-
-def address_for(pattern: str, full_name: str, domain: str, *, particle: bool = False) -> str | None:
-    parts = split_name(full_name)
-    if parts is None:
-        return None
-    local = render_pattern(pattern, parts, particle=particle)
-    if not local:
-        return None
-    return f"{local}@{domain.lower()}"
 
 
 # ---------------------------------------------------------------------------
@@ -1181,27 +1161,6 @@ async def collect_from_site(
         return await _run(egress)
     async with EgressClient() as client:
         return await _run(client)
-
-
-def addresses_from_pages(pages: Iterable[Any], domain: str | None = None) -> list[FoundAddress]:
-    """Harvest a crawl that another stage already paid for (FR-182 reuse).
-
-    Accepts ``crawler.CrawledPage`` objects or plain ``{"url", "text"}`` dicts.
-    """
-    collected: dict[str, FoundAddress] = {}
-    for page in pages:
-        url = getattr(page, "url", None) or (page.get("url") if isinstance(page, dict) else "")
-        text = getattr(page, "text", None) or (page.get("text") if isinstance(page, dict) else "")
-        if not text:
-            continue
-        method = _classify_page(url or "")
-        for item in attach_names(
-            extract_addresses(text, source_url=url or "", method=method, domain=domain)
-        ):
-            current = collected.get(item.email)
-            if current is None or item.confidence > current.confidence:
-                collected[item.email] = item
-    return list(collected.values())
 
 
 # ---------------------------------------------------------------------------

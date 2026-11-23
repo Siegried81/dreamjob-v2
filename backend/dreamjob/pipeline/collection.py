@@ -2019,6 +2019,7 @@ async def _rank_collected(ctx: JobContext, campaign: dict, outcome: str) -> dict
         ctx.save_checkpoint(rank_passes=sorted(completed_passes), rank_report=report)
         return result
 
+    await once("company_country", _fill_company_countries)
     synthesis = await once("synthesis", _synthesise)
     if "error" in synthesis:
         return report
@@ -2074,6 +2075,20 @@ async def _pass(ctx: JobContext, campaign: dict, name: str, fn: Any) -> dict:
             detail={"error": reason},
         )
         return {"error": reason}
+
+
+def _fill_company_countries(campaign: dict) -> dict:
+    """Give country-less companies the country of most of their postings.
+
+    A vacancy's country is where the job is and is never stamped on its company
+    (see ``knowledge_base``), so a company discovered through an ATS board stays
+    country-less, and the planner, which can only drop a company whose country
+    is known and outside the search, plans it for every campaign.  Collection is
+    what adds the postings that answer the question, so it ends here.
+    """
+    from dreamjob.db.repositories import companies as company_repo  # noqa: PLC0415
+
+    return {"companies_updated": company_repo.backfill_country_from_vacancies()}
 
 
 def _synthesise(campaign: dict) -> dict:

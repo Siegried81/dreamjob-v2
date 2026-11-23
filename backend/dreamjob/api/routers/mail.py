@@ -296,13 +296,13 @@ def gmail_callback(
     the job seeker who started it.
     """
     if error:
-        return _callback_page(f"Google reported: {error}", ok=False)
+        return callback_page(f"Google reported: {error}", ok=False)
     if not code or not state:
-        return _callback_page("The callback arrived without a code or state.", ok=False)
+        return callback_page("The callback arrived without a code or state.", ok=False)
     try:
         account = gmail.complete_authorization(state, code)
     except MailBackendError as exc:
-        return _callback_page(str(exc), ok=False)
+        return callback_page(str(exc), ok=False)
     record_audit(
         "mail_account.connected",
         "mail_account",
@@ -310,7 +310,7 @@ def gmail_callback(
         seeker_id=account["job_seeker_id"],
         detail={"address": account["address"], "scopes": account["scopes"]},
     )
-    return _callback_page(f"{account['address']} is connected. You can close this tab.", ok=True)
+    return callback_page(f"{account['address']} is connected. You can close this tab.", ok=True)
 
 
 # --- Microsoft 365, read-only over Graph (FR-326, NFR-204) -----------------
@@ -334,15 +334,15 @@ def m365_callback(
 ) -> HTMLResponse:
     """The loopback redirect target; the ``state`` row identifies the job seeker."""
     if error:
-        return _callback_page(
+        return callback_page(
             f"Microsoft reported: {error} {error_description or ''}".strip(), ok=False
         )
     if not code or not state:
-        return _callback_page("The callback arrived without a code or state.", ok=False)
+        return callback_page("The callback arrived without a code or state.", ok=False)
     try:
         account = m365.complete_authorization(state, code)
     except MailBackendError as exc:
-        return _callback_page(str(exc), ok=False)
+        return callback_page(str(exc), ok=False)
     record_audit(
         "mail_account.connected",
         "mail_account",
@@ -350,14 +350,15 @@ def m365_callback(
         seeker_id=account["job_seeker_id"],
         detail={"address": account["address"], "scopes": account["scopes"], "read_only": True},
     )
-    return _callback_page(
+    return callback_page(
         f"{account['address']} is connected, read-only. You can close this tab.", ok=True
     )
 
 
-def _callback_page(message: str, *, ok: bool) -> HTMLResponse:
+def callback_page(message: str, *, ok: bool, subject: str = "Mailbox") -> HTMLResponse:
+    """The page a provider redirect lands on, shared with the calendar flow."""
     colour = "#1a7f37" if ok else "#b42318"
-    title = "Mailbox connected" if ok else "Connection failed"
+    title = f"{subject} connected" if ok else "Connection failed"
     # The message can carry a provider error string straight from the query
     # string, and this page is served on the API origin with the session cookie
     # in scope - escaping is the whole defence against a crafted callback link.

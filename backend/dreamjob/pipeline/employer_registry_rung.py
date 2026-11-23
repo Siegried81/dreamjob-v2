@@ -1469,13 +1469,6 @@ def page_identity(
 # Re-verifying the domains the old gate confirmed
 # ---------------------------------------------------------------------------
 
-#: Reasons a domain is taken back, in the vocabulary the revocation row holds
-#: and in the order :func:`_revocation_reason` decides them.
-REVOKE_REASONS = (
-    "off_domain_redirect", "parked", "country_mismatch", "js_rendered_or_empty", "namesake",
-)
-
-
 @dataclass
 class ReverifyReport:
     """What re-verification did to the confirmed derived domains."""
@@ -1647,6 +1640,3 @@ async def reverify_derived_domains(
     return report
 
 
-def run_reverify_derived_domains(limit: int = 1000, **kwargs: Any) -> dict[str, Any]:
-    """Synchronous entry point, for scripts and the job runner."""
-    return asyncio.run(reverify_derived_domains(limit, **kwargs)).as_dict()

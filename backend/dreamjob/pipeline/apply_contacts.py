@@ -1580,11 +1580,6 @@ async def ensure_apply_contacts(
     return report
 
 
-def run_ensure_apply_contacts(job_seeker_id: str, limit: int = 500, **kwargs: Any) -> dict[str, Any]:
-    """Synchronous entry point, for scripts and the job runner."""
-    return asyncio.run(ensure_apply_contacts(job_seeker_id, limit, **kwargs)).as_dict()
-
-
 # ---------------------------------------------------------------------------
 # The job the Contacts screen starts (FR-185, NFR-401, NFR-502)
 # ---------------------------------------------------------------------------

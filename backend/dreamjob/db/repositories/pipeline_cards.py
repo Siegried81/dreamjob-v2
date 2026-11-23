@@ -716,16 +716,6 @@ def get_watch(entry_id: str, job_seeker_id: str) -> dict | None:
     )
 
 
-def find_watch(job_seeker_id: str, company_id: str) -> dict | None:
-    return _decode(
-        query_one(
-            _WATCH_SELECT + " WHERE w.job_seeker_id = ? AND w.company_id = ?",
-            (job_seeker_id, company_id),
-        ),
-        WATCH_JSON,
-    )
-
-
 def list_watches(job_seeker_id: str, *, active_only: bool = False) -> list[dict]:
     sql = _WATCH_SELECT + " WHERE w.job_seeker_id = ?"
     if active_only:
@@ -933,9 +923,16 @@ def mark_all_read(job_seeker_id: str) -> int:
 
 
 def save_digest(job_seeker_id: str, values: dict) -> str:
+    """Store a digest, or refresh the one already stored for that calendar day.
+
+    The period is matched on its end *date*, not the exact second: the notification
+    the digest raises is deduplicated on the day, and a regeneration a second later
+    must refresh the digest rather than add a second one.
+    """
     existing = query_one(
-        "SELECT id FROM digest WHERE job_seeker_id = ? AND period_start = ? AND period_end = ?",
-        (job_seeker_id, values.get("period_start"), values.get("period_end")),
+        "SELECT id FROM digest WHERE job_seeker_id = ? AND substr(period_end, 1, 10) = ? "
+        "ORDER BY period_end DESC LIMIT 1",
+        (job_seeker_id, str(values.get("period_end") or "")[:10]),
     )
     if existing:
         update_row("digest", existing["id"], values)

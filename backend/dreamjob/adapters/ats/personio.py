@@ -43,6 +43,7 @@ from dreamjob.adapters.vacancy_source import (
     split_skills,
     title_matches,
 )
+from dreamjob.pipeline import safe_xml
 
 log = logging.getLogger(__name__)
 
@@ -147,7 +148,7 @@ class PersonioAdapter(ATSAdapter):
             log.warning("Personio feed exceeds %d bytes; refusing to parse", MAX_FEED_BYTES)
             raise ValueError(f"Personio feed exceeds {MAX_FEED_BYTES} bytes")
         try:
-            root = ElementTree.fromstring(xml_body)
+            root = safe_xml.fromstring(xml_body)
         except ElementTree.ParseError as exc:
             log.warning("Personio feed is not well-formed XML: %s", exc)
             raise ValueError(f"Personio feed is not well-formed XML: {exc}") from exc

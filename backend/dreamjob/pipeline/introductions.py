@@ -772,10 +772,6 @@ def propose_paths(
     return routes
 
 
-def stored_paths(job_seeker_id: str, opportunity_id: str) -> list[dict]:
-    return repo.introduction_paths(job_seeker_id, opportunity_id=opportunity_id)
-
-
 def outreach_options(job_seeker_id: str, opportunity_id: str) -> dict[str, Any]:
     """FR-302: offer "request an introduction" beside the cold e-mail.
 

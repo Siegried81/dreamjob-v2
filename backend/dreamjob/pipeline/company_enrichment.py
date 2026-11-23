@@ -48,9 +48,6 @@ log = logging.getLogger(__name__)
 #: the next run or on the nightly sweep.
 DEFAULT_COMPANY_LIMIT = 15
 
-#: The nightly sweep is allowed to work through more of the backlog.
-SWEEP_COMPANY_LIMIT = 60
-
 
 @dataclass
 class EnrichmentReport:
@@ -290,6 +287,7 @@ async def _refresh_signals(company_ids: list[str]) -> dict:
             try:
                 produced = producer(company_id)
             except Exception:  # noqa: BLE001 - one producer must not stop the rest
+                log.exception("Signal producer %s failed for %s", producer.__name__, company_id)
                 continue
             found += len(produced or [])
         if found:

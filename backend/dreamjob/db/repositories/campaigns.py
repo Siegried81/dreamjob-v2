@@ -88,6 +88,21 @@ def set_stage(campaign_id: str, stage: str, status: str | None = None) -> None:
             values["finished_at"] = utcnow()
     update_row("campaign", campaign_id, values)
     invalidate_active_seeker_cache()
+    if "finished_at" in values:
+        _restamp_person_records(campaign_id)
+
+
+def _restamp_person_records(campaign_id: str) -> None:
+    """NFR-303: a finished campaign's person records now have a real end date.
+
+    Records collected while it ran were stamped from "now" plus the grace
+    period, because the end was not known; the deadline is the campaign's end
+    plus the grace period.
+    """
+    from dreamjob.db.repositories import browser as browser_repo  # noqa: PLC0415
+    from dreamjob.db.repositories import contacts as contacts_repo  # noqa: PLC0415
+
+    contacts_repo.expire_campaign_records(campaign_id, browser_repo.retention_until(campaign_id))
 
 
 def delete_campaign(campaign_id: str, job_seeker_id: str) -> int:

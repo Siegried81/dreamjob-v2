@@ -24,6 +24,12 @@ rather than guessing. The proposal's `P 1.00 / R 0.95` is not reproduced: the
 measured recall is **0.78–0.79**, and §3.3 explains exactly why, because the
 gap is a design decision rather than a defect.
 
+*Since this run (2026-11-22) the register's own signals, R1 and D6, are merged
+into the free-signal band, which moves the band-level figures in §9. The
+verdict figures above (267 of 1,216, P 1.00, R 0.78) come from the live run of
+9 September and have not been re-run: the merge changes the stored band and the
+queue order, never a verdict.*
+
 ---
 
 ## 1. What was integrated
@@ -547,6 +553,39 @@ print(run_resolve_many(2000, concurrency=8))"
 curl -b cookies.txt http://127.0.0.1:8000/api/employers/coverage
 ```
 
-The evaluation script, the walk script and the re-verification dry run used for
-this report are working files, not part of the tree. The measurements they
-produced are all reproducible from the database and the endpoints above.
+Precision and recall on the 43 labelled employers, read-only from the database:
+
+```bash
+python3 scripts/eval_employer_kind.py          # add --json for raw numbers
+```
+
+It also names any direct employer flagged as an agency and lists the labelled
+employers missing from the database.
+
+## 9. After the register's signals are merged (2026-11-22)
+
+`Signals.with_signals` now receives R1 (a 78.x code in the register) and D6 (the
+register resolved the company and lists no 78 code) from the registry rung, and
+the band is recomputed over the union. The stored rung-0b snapshot carries the
+new band and score, which set the queue priority and the "suspected" hint shown
+beside a `cannot_tell`. A verdict is still decided only by a rung's own evidence,
+so the counts of agency, employer and `cannot_tell` do not move.
+
+Measured offline on the 43 labelled employers (`tests/fixtures/agency_labels.json`),
+with the register's answer simulated from each employer's label source: an
+agency whose source cites a KBO 78.x code gets R1; Belgian direct employers and
+the two agencies the register files under other codes (100G, EDITX) get D6; the
+three names the register can't answer for get nothing. A live register run
+wasn't possible here, so the real-corpus figures stay those of §3.
+
+| Band | Before (free signals) | After (R1 and D6 merged) |
+|---|---|---|
+| probable and above | P 1.00, R 0.55 (11 of 20 agencies) | P 1.00, R 0.65 (13 of 20) |
+| possible and above | P 1.00, R 0.85 (17 of 20) | P 1.00, R 0.90 (18 of 20) |
+| direct employers flagged as an agency | 0 | 0 |
+
+Seven employers change band: FORUM JOBS, KONVERT HR and ADECCO PERSONNEL SERVICES
+go from probable to certain, VIND from possible to certain and EHRS from unknown
+to probable (all R1); SMALS VZW and DE BRANDT go from unknown to direct_likely
+(D6). `test_merging_the_registers_signals_lifts_band_recall_and_flags_no_direct_employer`
+holds these figures.

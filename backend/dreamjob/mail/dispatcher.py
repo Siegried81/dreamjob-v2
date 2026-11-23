@@ -363,7 +363,7 @@ def resolve_backend(job_seeker_id: str, backend_key: str | None = None) -> tuple
             "id": None,
             "job_seeker_id": job_seeker_id,
             "backend": "resend",
-            "address": get_settings().mail_from or "stephane@stepvda.com",
+            "address": get_settings().mail_from,
         }
     return backend_for_account(account), account
 

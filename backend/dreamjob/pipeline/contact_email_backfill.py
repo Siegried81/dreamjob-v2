@@ -545,11 +545,6 @@ async def backfill_missing_emails(
     return report
 
 
-def run_contact_email_backfill(job_seeker_id: str, **kwargs: Any) -> dict[str, Any]:
-    """Synchronous entry point, for scripts and the job runner."""
-    return asyncio.run(backfill_missing_emails(job_seeker_id, **kwargs)).as_dict()
-
-
 async def contact_email_backfill_worker(ctx: JobContext):
     """Run the backfill for a seeker, reporting what it stored.
 

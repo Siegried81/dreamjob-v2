@@ -104,10 +104,6 @@ def active_map() -> dict[str, dict]:
     return repo.active_declines()
 
 
-def is_declined(adapter_key: str) -> dict | None:
-    return repo.get_active_decline(adapter_key)
-
-
 def reason_label(reason: str | None) -> str:
     return _REASON_LABELS.get(str(reason or ""), "the source is declined")
 

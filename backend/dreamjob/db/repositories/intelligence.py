@@ -317,14 +317,6 @@ def get_company(company_id: str) -> dict | None:
     return query_one("SELECT * FROM company WHERE id = ?", (company_id,))
 
 
-def company_vacancy_language_counts(company_id: str) -> list[dict]:
-    return query_all(
-        "SELECT language, COUNT(*) AS n FROM vacancy WHERE company_id = ? AND language IS NOT NULL "
-        "GROUP BY language ORDER BY n DESC",
-        (company_id,),
-    )
-
-
 # ---------------------------------------------------------------------------
 # FR-443: LinkedIn profile advice
 # ---------------------------------------------------------------------------
@@ -513,17 +505,6 @@ def campaign_company_ids(job_seeker_id: str, campaign_id: str | None = None) -> 
         sql += " AND campaign_id = ?"
         params.append(campaign_id)
     return [r["company_id"] for r in query_all(sql, tuple(params))]
-
-
-def contacts_for_companies(company_ids: list[str]) -> list[dict]:
-    if not company_ids:
-        return []
-    marks = ", ".join("?" for _ in company_ids)
-    return query_all(
-        f"SELECT id, company_id, full_name, role_title, email, linkedin_url, objected "
-        f"FROM contact WHERE company_id IN ({marks})",
-        tuple(company_ids),
-    )
 
 
 # ---------------------------------------------------------------------------

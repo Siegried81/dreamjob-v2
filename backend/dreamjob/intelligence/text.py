@@ -131,9 +131,3 @@ def statement_texts(block: Any) -> list[str]:
     return out
 
 
-def first_sentence(text: str, limit: int = 220) -> str:
-    body = re.sub(r"\s+", " ", str(text or "")).strip()
-    if not body:
-        return ""
-    cut = re.split(r"(?<=[.!?])\s", body)[0]
-    return cut[:limit].strip()

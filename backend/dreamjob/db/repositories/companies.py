@@ -46,12 +46,6 @@ def get_company(company_id: str) -> dict | None:
     return query_one("SELECT * FROM company WHERE id = ?", (company_id,))
 
 
-def is_suppressed(company_id: str) -> bool:
-    """Whether this shared company row is hidden from browse and counts."""
-    row = query_one("SELECT suppressed FROM company WHERE id = ?", (company_id,))
-    return bool(row and row["suppressed"])
-
-
 def suppress_company(company_id: str, reason: str) -> dict | None:
     """Hide a shared company without deleting it (FR-341, NFR-302).
 
@@ -80,15 +74,6 @@ def unsuppress_company(company_id: str) -> dict | None:
     if not cur.rowcount:
         return None
     return get_company(company_id)
-
-
-def company_freshness(company_id: str) -> str | None:
-    """The moment the profile last reflected the outside world (FR-226, FR-343)."""
-    row = query_one(
-        "SELECT COALESCE(refreshed_at, collected_at) AS freshness FROM company WHERE id = ?",
-        (company_id,),
-    )
-    return row["freshness"] if row else None
 
 
 def companies_in_country(

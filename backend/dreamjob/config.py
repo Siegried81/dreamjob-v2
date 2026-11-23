@@ -123,7 +123,8 @@ class Settings(BaseSettings):
     # --- Mail (FR-325) -----------------------------------------------------
     mail_backend: str = Field("resend", alias="DREAMJOB_MAIL_BACKEND")
     mail_from: str = Field("", alias="DREAMJOB_MAIL_FROM")
-    mail_from_name: str = Field("", alias="DREAMJOB_MAIL_FROM_NAME")
+    owner_email: str = Field("", alias="DREAMJOB_OWNER_EMAIL")
+    owner_name: str = Field("", alias="DREAMJOB_OWNER_NAME")
     resend_api_key: str = Field("", alias="RESEND_API_KEY")
     gmail_client_id: str = Field("", alias="GMAIL_CLIENT_ID")
     gmail_client_secret: str = Field("", alias="GMAIL_CLIENT_SECRET")
@@ -159,6 +160,9 @@ class Settings(BaseSettings):
         "DreamJobBot/0.1",
         alias="DREAMJOB_USER_AGENT",
     )
+    # An address or URL a site operator can write to.  Empty means the header
+    # carries the product token alone: no contact is built in.
+    crawler_contact: str = Field("", alias="DREAMJOB_CRAWLER_CONTACT")
     http_cache_ttl_seconds: int = Field(86_400, alias="DREAMJOB_HTTP_CACHE_TTL_SECONDS")
     # Vacancy sources (ATS boards, job boards) change within the hour while
     # registries and filings change yearly, so one TTL for both either serves
@@ -255,6 +259,20 @@ class Settings(BaseSettings):
     geocoder_url: str = Field("https://nominatim.openstreetmap.org", alias="DREAMJOB_GEOCODER_URL")
     google_calendar_client_id: str = Field("", alias="GOOGLE_CALENDAR_CLIENT_ID")
     google_calendar_client_secret: str = Field("", alias="GOOGLE_CALENDAR_CLIENT_SECRET")
+    google_calendar_redirect_uri: str = Field(
+        "http://127.0.0.1:8000/api/pipeline/calendar/callback",
+        alias="GOOGLE_CALENDAR_REDIRECT_URI",
+    )
+
+    @property
+    def user_agent_header(self) -> str:
+        """The ``User-Agent`` sent on the wire: the product token plus the contact, if any.
+
+        ``robots.txt`` is matched on :attr:`user_agent` alone, which is the token
+        a site lists in its rules; the contact is only for the operator reading logs.
+        """
+        contact = self.crawler_contact.strip()
+        return f"{self.user_agent} (contact: {contact})" if contact else self.user_agent
 
     @field_validator("send_window_start", "send_window_end", mode="before")
     @classmethod

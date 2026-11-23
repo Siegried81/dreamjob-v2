@@ -18,13 +18,12 @@ comes out at the declared 6.5 inches and the set stays dimensionally consistent.
 
 from __future__ import annotations
 
+import facts
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import FancyBboxPatch
-
-import facts
 import style as S
+from matplotlib.patches import FancyBboxPatch
 
 # The rose tint from the palette, used here as the ground for a hard stop.  It
 # is the only pale red in style.py; nothing new is introduced.
