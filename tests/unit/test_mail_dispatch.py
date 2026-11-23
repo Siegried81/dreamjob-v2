@@ -45,8 +45,7 @@ def isolated_db(tmp_path: Path) -> Iterator[None]:
     os.environ["DREAMJOB_SESSION_SECRET"] = secrets.token_urlsafe(32)
     os.environ["DREAMJOB_ENV"] = "development"
     os.environ["RESEND_API_KEY"] = ""
-    # Blanked like the key: a sender set in the machine's .env would otherwise
-    # replace the default sender these tests check for.
+    # Blanked like the key: a sender set in the machine's .env would leak in.
     os.environ["DREAMJOB_MAIL_FROM"] = ""
     os.environ["GMAIL_CLIENT_ID"] = ""
     os.environ["GMAIL_CLIENT_SECRET"] = ""
@@ -1132,17 +1131,43 @@ def test_resend_reports_itself_as_not_configured_without_a_key():
     state = backend.status()
     assert state["configured"] is False
     assert "RESEND_API_KEY" in state["reason"]
-    assert state["from_address"] == "stephane@stepvda.com"
+    assert state["from_address"] == "", "no sender is built in"
+    assert "DREAMJOB_MAIL_FROM" in state["reason"]
 
     message = OutgoingMessage(
         to_email="marie@acme.test",
         subject="Hello",
         body_text="Hello.",
-        from_email="stephane@stepvda.com",
-        message_id=new_message_id("stepvda.com"),
+        from_email="you@example.com",
+        message_id=new_message_id("example.com"),
     )
     with pytest.raises(MailBackendNotConfigured, match="RESEND_API_KEY"):
         backend.send(message)
+
+
+def test_resend_with_a_key_but_no_sender_is_still_unavailable(monkeypatch):
+    from dreamjob.config import get_settings
+    from dreamjob.mail.base import MailBackendNotConfigured, OutgoingMessage
+    from dreamjob.mail.resend_backend import ResendBackend
+
+    monkeypatch.setenv("RESEND_API_KEY", "re_test")
+    monkeypatch.setenv("DREAMJOB_MAIL_FROM", "")
+    get_settings.cache_clear()
+    backend = ResendBackend()
+
+    state = backend.status()
+    assert state["configured"] is False
+    assert "DREAMJOB_MAIL_FROM" in state["reason"]
+    assert "RESEND_API_KEY" not in state["reason"]
+    with pytest.raises(MailBackendNotConfigured, match="DREAMJOB_MAIL_FROM"):
+        backend.send(OutgoingMessage(to_email="a@acme.test", subject="s", body_text="b"))
+
+    monkeypatch.setenv("DREAMJOB_MAIL_FROM", "me@example.org")
+    get_settings.cache_clear()
+    ready = ResendBackend().status()
+    assert ready["configured"] is True
+    assert ready["from_address"] == "me@example.org"
+    get_settings.cache_clear()
 
 
 def test_resend_webhook_signature_is_verified():
@@ -1184,7 +1209,7 @@ def test_resend_bounce_webhook_marks_the_dispatch(world):
             "application_package_id": world["package_id"],
             "backend": "resend",
             "recipient_email": "marie@acme.test",
-            "message_id": "<abc@stepvda.com>",
+            "message_id": "<abc@example.com>",
             "thread_id": "resend-id-1",
             "delivery_status": "sent",
             "sent_at": "2026-09-09T08:00:00+00:00",

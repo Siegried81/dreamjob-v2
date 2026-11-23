@@ -28,7 +28,8 @@ explicit rather than hidden:
     a Microsoft inbox are still detected (FR-326).
 
 ``resend``
-    A transactional relay on ``stepvda.com``.  It sends when no personal
+    A transactional relay on a domain the operator verified (``DREAMJOB_MAIL_FROM``).
+    It sends when no personal
     mailbox is connected; ``Reply-To`` still points at the job seeker, but the
     delivery news arrives as a webhook rather than in their inbox, because the
     relay has no IMAP.

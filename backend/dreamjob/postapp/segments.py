@@ -32,6 +32,7 @@ from typing import Any
 
 from dreamjob.db.connection import from_json, insert_row, utcnow
 from dreamjob.db.repositories import learning as repo
+from dreamjob.postapp.board import decode_variables
 from dreamjob.postapp.outcomes import OUTCOMES, outcome_flags, wilson_interval
 
 log = logging.getLogger(__name__)
@@ -150,9 +151,7 @@ def _dimension_values(row: dict) -> dict[str, str | None]:
     elif isinstance(codes, dict):
         sector = codes.get("primary") or next(iter(codes.values()), None)
 
-    variables = row.get("variables") or {}
-    if isinstance(variables, str):
-        variables = from_json(variables, {}) or {}
+    variables = decode_variables(row)
 
     return {
         "function_family": row.get("function_family"),

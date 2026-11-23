@@ -168,12 +168,6 @@ def record_source(job_seeker_id: str, record: dict[str, Any]) -> dict:
     )
 
 
-def delete_source(job_seeker_id: str, kind: str) -> int:
-    return execute(
-        "DELETE FROM profile_source WHERE job_seeker_id = ? AND kind = ?", (job_seeker_id, kind)
-    )
-
-
 # ---------------------------------------------------------------------------
 # Do-not-disclose flags (FR-106)
 # ---------------------------------------------------------------------------

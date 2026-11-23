@@ -203,24 +203,6 @@ def upsert_analysis(data: dict) -> str:
         return str(existing["id"])
 
 
-def analyses_for(company_ids: list[str]) -> dict[str, dict]:
-    """Bulk read for the opportunity scorer (FR-281) and the negotiation brief (FR-444)."""
-    if not company_ids:
-        return {}
-    marks = ", ".join("?" for _ in company_ids)
-    rows = query_all(
-        f"SELECT * FROM financial_analysis WHERE company_id IN ({marks})", tuple(company_ids)
-    )
-    return {r["company_id"]: r for r in rows}
-
-
-def stale_analyses(cutoff: str, limit: int = 100) -> list[dict]:
-    return query_all(
-        "SELECT * FROM financial_analysis WHERE computed_at < ? ORDER BY computed_at LIMIT ?",
-        (cutoff, int(limit)),
-    )
-
-
 # ---------------------------------------------------------------------------
 # Group structure (FR-246)
 # ---------------------------------------------------------------------------
@@ -229,7 +211,6 @@ def stale_analyses(cutoff: str, limit: int = 100) -> list[dict]:
 #: consolidated total.  Everything else the table carries - a former name, an
 #: alias - is identity, not ownership, and must never be summed (FR-246).
 GROUP_RELATIONS: tuple[str, ...] = ("subsidiary", "branch", "participation")
-
 
 
 def link_subsidiary(
@@ -302,15 +283,6 @@ def group_aliases(company_id: str) -> list[dict]:
         "AND relation NOT IN ('subsidiary', 'branch', 'participation') "
         "ORDER BY subsidiary_name",
         (company_id,),
-    )
-
-
-def parents_of(company_id: str) -> list[dict]:
-    marks = ", ".join("?" for _ in GROUP_RELATIONS)
-    return query_all(
-        f"SELECT * FROM company_group_link WHERE subsidiary_company_id = ? "
-        f"AND relation IN ({marks})",
-        (company_id, *GROUP_RELATIONS),
     )
 
 

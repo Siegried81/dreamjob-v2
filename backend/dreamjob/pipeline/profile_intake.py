@@ -465,6 +465,30 @@ def apply_resolutions(sections: dict[str, Any], conflicts: list[dict]) -> dict[s
     return sections
 
 
+_MISSING = object()
+
+
+def _child(node: Any, part: str) -> Any:
+    """``node[part]`` for a dict key or a list index, or ``_MISSING`` when absent."""
+    if isinstance(node, list):
+        if not part.isdigit() or int(part) >= len(node):
+            return _MISSING
+        return node[int(part)]
+    if isinstance(node, dict):
+        return node[part] if part in node else _MISSING
+    return _MISSING
+
+
+def _parent_of(sections: dict[str, Any], parts: list[str]) -> Any:
+    """The container that holds the last part of a dotted path, or ``_MISSING``."""
+    node: Any = sections
+    for part in parts[:-1]:
+        node = _child(node, part)
+        if node is _MISSING:
+            return _MISSING
+    return node
+
+
 def clear_path(sections: dict[str, Any], path: str) -> bool:
     """Remove the value at ``path``.
 
@@ -474,19 +498,10 @@ def clear_path(sections: dict[str, Any], path: str) -> bool:
     paths reference).  "Leave blank" then means the fact is absent, never that
     a slot in the middle of the array disappeared.
     """
-    node: Any = sections
     parts = path.split(".")
-    for part in parts[:-1]:
-        if isinstance(node, list):
-            if not part.isdigit() or int(part) >= len(node):
-                return False
-            node = node[int(part)]
-        elif isinstance(node, dict):
-            if part not in node:
-                return False
-            node = node[part]
-        else:
-            return False
+    node = _parent_of(sections, parts)
+    if node is _MISSING:
+        return False
     leaf = parts[-1]
 
     if isinstance(node, list) and leaf.isdigit():
@@ -507,19 +522,10 @@ def clear_path(sections: dict[str, Any], path: str) -> bool:
 
 
 def set_path(sections: dict[str, Any], path: str, value: Any) -> bool:
-    node: Any = sections
     parts = path.split(".")
-    for part in parts[:-1]:
-        if isinstance(node, list):
-            if not part.isdigit() or int(part) >= len(node):
-                return False
-            node = node[int(part)]
-        elif isinstance(node, dict):
-            if part not in node:
-                return False
-            node = node[part]
-        else:
-            return False
+    node = _parent_of(sections, parts)
+    if node is _MISSING:
+        return False
     leaf = parts[-1]
     if isinstance(node, list) and leaf.isdigit() and int(leaf) < len(node):
         node[int(leaf)] = value
@@ -531,19 +537,12 @@ def set_path(sections: dict[str, Any], path: str, value: Any) -> bool:
 
 
 def get_path(sections: dict[str, Any], path: str, default: Any = None) -> Any:
-    node: Any = sections
-    for part in path.split("."):
-        if isinstance(node, list):
-            if not part.isdigit() or int(part) >= len(node):
-                return default
-            node = node[int(part)]
-        elif isinstance(node, dict):
-            if part not in node:
-                return default
-            node = node[part]
-        else:
-            return default
-    return node
+    parts = path.split(".")
+    parent = _parent_of(sections, parts)
+    if parent is _MISSING:
+        return default
+    value = _child(parent, parts[-1])
+    return default if value is _MISSING else value
 
 
 # ---------------------------------------------------------------------------

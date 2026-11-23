@@ -1,391 +1,244 @@
 # Decisions
 
-A dated record of choices that are not readable from the code alone - what was
-decided, why, and what would reverse it. Git carries authorship; this file
-carries the reasoning.
+Choices that the code alone doesn't explain: what was decided, why, and what
+would reverse it. Git carries authorship, this file carries the reasoning.
+Oldest first.
 
-## 2026-10-06 — `board.jobat` now requires an IR-101 acknowledgement
+## 2026-10-06: `board.jobat` needs an IR-101 acknowledgement
 
-**What changed.** `adapters/jobboards/jobat.py` had `requires_ack = False` with
-`tos_status = RESTRICTED`. It is now `requires_ack = True`, and the
-`source_catalogue` row was updated to match, so `is_enabled()` refuses the
-adapter until an administrator acknowledges it.
+`requires_ack` is now true and the catalogue row matches, so the adapter stays
+off until an administrator acknowledges it. It had collected for real: 23 cached
+pages, all HTTP 200, and a later 403 run, while the data-gathering rules say not
+to touch Jobat. Acknowledgement rather than deletion, because the legal reading
+isn't settled and `requires_ack` is the gate built for this case. The job-alert
+mail route (`alert.jobat`) reads the seeker's own mailbox and is unaffected.
 
-**Why.** The adapter had actually collected. `http_cache` holds 23 rows for
-`www.jobat.be/nl/jobs?...`, every one HTTP **200**, between 2026-10-04 14:14:04
-and 15:03:01, and `adapter_decline` records `board.jobat / http_403` with
-request_count 7 / refused_count 6 from a later run. Meanwhile
-`docs/Data_Gathering_Plan.md` rule 1 says "Do not touch Indeed, LinkedIn,
-StepStone or Jobat", and gives as its reason that circumventing Jobat's 403 "is
-exactly the behaviour the product promises not to engage in".
+## 2026-10-10: the quickstart installs before it generates keys
 
-The adapter's own docstring argues that the 403 makes staying enabled harmless
-and lets the operator see the failures. The 23 successes refute the premise: the
-403 is intermittent, so "enabled" meant "collects whenever Cloudflare lets it".
+`requirements.txt` doesn't install the package under `backend/`, so every
+`python -m dreamjob...` command needs `PYTHONPATH=backend` and the pip install
+has to come before `--generate-key`. The README, the architecture doc,
+`scripts/dev.sh` and the `bootstrap.py` warning say so. Making the package
+installable (`-e .`) would remove the prefix.
 
-**Why acknowledgement rather than deletion.** The adapter is working code and the
-legal position is arguable - a low-rate read of public advert pages, storing only
-what the advert states. What was not arguable is that it ran with no recorded
-human decision while a written rule forbade it. `requires_ack` is the gate this
-repo already built for exactly that situation (`adapters/base.py:175-186`), so
-using it is cheaper and more honest than a second mechanism.
+## 2026-10-11: `tzdata` is a declared dependency
 
-**What this does not change.** The job-alert e-mail route
-(`mail/job_alerts.py`, source `alert.jobat`) is untouched and unaffected: it
-reads the seeker's own mailbox, makes no HTTP call, and stores no Jobat URL.
-That route is the lawful alternative the rule exists to push towards.
+Windows has no system time-zone database, so a venv built from the requirements
+alone failed 50 tests on `ZoneInfo("Europe/Brussels")`. Declared explicitly.
 
-**What would reverse it.** An administrator acknowledging the source, which is
-the point - the decision becomes visible and attributable. Deleting the adapter
-instead would also be defensible; it was not chosen because it discards work
-whose legal reading has not actually been settled.
+## 2026-10-11: scores changed meaning, and area search was added
 
-## 2026-10-10 — The quickstart installs before it generates keys
+Ported from the upstream project. A skill estimate shrinks towards a prior when
+evidence is thin, a part of a posting that can't be assessed counts as neutral,
+a job family needs two matches outside the title, and filler culture phrases are
+ignored. Scores computed before this aren't comparable with scores after it:
+re-score before comparing two lists. Opportunities can be filtered by distance
+(`near_lat`, `near_lon`, `radius_km`, `include_remote`), and a `geolocation`
+scheduler task places each one on the map through Nominatim at one request per
+second (migration 158). That is a background process calling a third party.
 
-**What.** README, `docs/Technical_Architecture.md`, `scripts/dev.sh` and the
-`bootstrap.py` warning now put `python3 -m venv` and `pip install` before
-`dreamjob.security.crypto --generate-key`, and prefix every `python -m
-dreamjob...` line with `PYTHONPATH=backend`.
+## 2026-10-12: a boolean app setting switched off reads as off
 
-**Why.** The package lives under `backend/` and `requirements.txt` does not
-install it, so the documented first command failed with `ModuleNotFoundError`
-on a fresh clone: the generator imports the package's own dependencies, which
-were not installed yet, and the package itself, which was not on the path.
-`scripts/dev.sh` already set `PYTHONPATH=backend`; the commands a reader types
-by hand did not.
+`set_setting` wrote `False` as the text `False`, which `bool()` read as true, so
+an administrator who switched the contact search provider off left it on.
+Booleans are stored as JSON now, and the two legacy texts are read back as
+booleans, so no migration is needed. A switch that was off now stays off.
 
-**What would reverse it.** Making the package installable from
-`requirements.txt` (`-e .`), after which the prefix becomes unnecessary and the
-order stops mattering.
+## 2026-10-12: profile enrichment uses the configured search provider
 
-## 2026-10-11 — a fresh Windows clone failed 50 tests for want of a time-zone database
+`pipeline/enrichment.web_search` asks the provider set for FR-303 (Brave, Bing,
+Google CSE) when it is on, and DuckDuckGo otherwise or on failure. The queries
+carry the seeker's name; they already left the machine under the FR-126
+consent, and now go to the provider the administrator chose. The request shape
+lives once in `email_patterns.provider_query`.
 
-`requirements.txt` never named `tzdata`. On Linux `zoneinfo` reads the system
-database; Windows has none, so `ZoneInfo("Europe/Brussels")` and even
-`ZoneInfo("UTC")` raised `ZoneInfoNotFoundError` in every test touching a send
-window, a relative date or the apply browser: 50 failures, 2,120 passed, on a
-venv built from the requirements alone. The older clone passed because another
-package had pulled `tzdata` in transitively. Declared explicitly; the four
-modules go from 50 failures to 128 passed. Same fix as the fixtures attribute
-committed earlier today: the repository must be true on the machine it is
-cloned to, not only on the one it was written on.
+## 2026-10-12: research passes skip agencies and job boards
 
-## 2026-10-11 — scores change meaning: area search, and a stricter dream-job score
+`company_profile.rerun`, `financial.rerun`, `financial.financial_worker` and
+`speculative.candidate_companies` drop companies whose effective employer role
+is `agency` or `board`, with the seeker's own correction applied. Reports now
+count companies actually worked on, plus `skipped_intermediaries`. Scores don't
+change, since scoring already refused an intermediary's company dimensions.
+The helper fails open: an unreadable verdict table skips nothing.
 
-Ported from stepvda/dreamjob (d01c0f1 and 318e83b, Stephane van der Aa), with
-his macOS service files left out.
+## 2026-10-12: the semantic index may enter the dream fit, off by default
 
-**What a score now means.** `pipeline/scoring.py` was reworked upstream: a
-skill estimate shrinks towards a prior when the evidence is thin, a part of a
-posting that cannot be assessed counts as neutral instead of as a match, a job
-family needs two matches outside the title, and filler culture phrases are
-ignored. `intelligence/gap_analysis.py` reads its weights from the scorer.
-Fewer postings reach the top band on wording alone. **Scores computed before
-this change are not comparable with scores after it** - re-score before
-comparing two lists.
+With `DREAMJOB_SEMANTIC_SCORING=true` and an embeddings model, the mechanical
+dream fit is `(0.5 title + 0.5 criteria + 0.25 similarity) / 1.25`; a vacancy
+without a stored vector keeps the two-part formula. Off by default because a raw
+cosine isn't on the same scale across models, and turning it on needs a re-score.
+A fifth of the weight, because it should break ties, not outvote the title.
 
-**Area search.** Opportunities can be filtered by distance (`near_lat`,
-`near_lon`, `radius_km`, `include_remote`), with place autocomplete. Every
-opportunity is now placed on the map by a `geolocation` scheduler task
-(every 2 minutes, through Nominatim at one request per second, as the existing
-`geocode.py` already does; migration 158), which replaces the manual locate
-button. This is a new background process that sends requests to a third party.
+## 2026-10-12: French companies are read from recherche-entreprises.api.gouv.fr
 
-## 2026-10-12 — a boolean app setting switched off now reads as off
+`registry.recherche_entreprises` is the `FR` registry. A French company gets its
+SIREN, NAF code and a headcount band, and where accounts are published, revenue
+and net result as registry figures instead of estimates. No balance sheet or
+personnel costs exist in that API, so those stay unknown, and `size_fte` is the
+lower bound of INSEE's band. Germany has no adapter: the Handelsregister has no
+official API and caps retrieval at 60 an hour.
 
-**The bug.** `knowledge.set_setting` wrote every non-container value with
-`str()`, so `False` was stored as the text `False`. That is not JSON, so
-`get_setting` returned the string `"False"`, and every reader that wraps it in
-`bool()` saw `True`. An administrator who switched the contact search provider
-off (`PUT /api/contacts/search-provider` with `enabled: false`) left it on;
-the contacts lookup service and continuous collection (`pipeline/continuous.py`)
-read their switches the same way. Proved by
-`tests/unit/test_search_provider_enrichment.py`, which fails on the old code.
+## 2026-10-12: one vacancy row per dedup key
 
-**The fix.** Booleans are now written as JSON (`true`/`false`), and the two
-legacy texts `True`/`False` already stored in a database are read back as
-booleans, so existing installations are corrected without a migration.
+Migration 160 makes `vacancy.dedup_key` unique after folding duplicates (242
+keys were stored twice on the installed database). The writer turns the
+resulting IntegrityError into a merge into the winning row, and a fuzzy merge
+never copies a key another row holds. The newest row survives. Vacancy counts
+fall by the rows folded; the deleted rows exist only in a pre-migration backup.
 
-**What changes for a reader.** A switch that was turned off and kept running
-now stops. Nothing that was on changes.
+## 2026-11-04: the semantic index can live in Qdrant, off by default
 
-## 2026-10-12 — profile enrichment uses the configured search provider
+`DREAMJOB_SEMANTIC_BACKEND=qdrant` stores vectors in a Qdrant server instead of
+the `embedding` table; `qdrant-client` is optional. The similarity is the same
+cosine either way. The content-hash skip is keyed by model, so switching model
+re-embeds everything, and one collection holds one dimension: drop it first when
+the size changes.
 
-`pipeline/enrichment.web_search` asks the search API configured for FR-303
-(Brave, Bing or Google CSE) when it is switched on, and DuckDuckGo otherwise
-or when the API fails for a query. Enrichment queries contain the job seeker's
-name; they already left the machine for DuckDuckGo under the FR-126
-enrichment consent, and now go to the provider the administrator chose
-instead. The request shape per provider lives once, in
-`email_patterns.provider_query`, shared with the contacts search.
+## 2026-11-08: digest counts are totals
 
-## 2026-10-12 — research passes skip agencies and job boards
-
-**What changed.** `company_profile.rerun`, `financial.rerun`,
-`financial.financial_worker` and `speculative.candidate_companies` now drop
-every company whose effective employer role is `agency` or `board`
-(`employer_product.intermediary_company_ids`, the seeker's own correction
-applied as on the badge). Unresearched and `unverified` companies still pass.
-
-**What a number means.** In the re-run reports, `companies` now counts the
-companies actually worked on, and the new `skipped_intermediaries` counts the
-ones left out; before, an agency was counted and profiled like any employer.
-No score changes: scoring already refused an intermediary's company
-dimensions, and stored profiles and filings are left as they are.
-
-**Why.** `docs/Employer_Kind_Results.md` §7 item 5: the gates existed in the
-repository and nothing called them, so an agency could still be crawled,
-pitched a speculative opening and have its accounts collected.
-
-**What would reverse it.** Dropping the call in one of the four passes; the
-helper fails open (an unreadable verdict table skips nothing).
-
-## 2026-10-12 — the semantic index may enter the dream fit, off by default
-
-**What.** `DREAMJOB_SEMANTIC_SCORING` (default `false`). When on, and an
-embeddings model is configured, the mechanical dream-fit sub-score becomes
-`(0.5 x title + 0.5 x criteria + 0.25 x similarity) / 1.25` instead of
-`(0.5 x title + 0.5 x criteria) / 1.0`, where similarity is the cosine between
-the vacancy's stored vector and the embedded dream job, clamped to 0..1. A
-vacancy with no stored vector keeps the two-part formula.
-
-**Why off.** It changes what a score means, and a raw cosine is not on the
-same scale across embeddings models. With the setting off, `_weighted` drops
-the missing term, the arithmetic is the two-part one exactly, and the embedder
-is never called - so no existing score changes.
-
-**Why a fifth.** The term measures topical closeness of whole texts, which the
-title and criteria terms already approximate; it is meant to break ties among
-adverts the mechanical terms rate alike, not to outvote them.
-
-**What would reverse it.** A per-model calibration of the cosine, after which
-the term could be on by default - with a re-score, since scores before and
-after would not be comparable.
-
-## 2026-10-12 — French companies are read from recherche-entreprises.api.gouv.fr
-
-**What changed.** `registry.recherche_entreprises` is the registry for `FR` in
-`pipeline/financial.REGISTRIES_BY_JURISDICTION`. Until now a French company
-fell through to OpenCorporates and the FR-245 estimated path; on its next
-financial pass it gets the register's identity (SIREN, NAF code, headcount
-band) and, where published, revenue and net result written as registry
-figures, not estimates. Stored rows do not change until that pass runs.
-
-**What a number means.** The ability-to-pay and trajectory figures of a French
-company that has published accounts now rest on two registry fields (revenue,
-net result) instead of secondary signals. Components that need a balance sheet
-or personnel costs stay unknown - the API publishes neither. `size_fte` is the
-lower bound of INSEE's headcount band, not a measured headcount.
-
-**Why this source.** It is the State's own free, keyless API (DINUM) over INSEE
-Sirene and the INPI RNE, under the Licence Ouverte. Germany was looked at and
-skipped: the Handelsregister has no official API and its terms cap retrieval at
-60 an hour.
-
-**What would reverse it.** Removing the `FR` entry sends French companies back
-to the estimated path; the adapter itself stays harmless.
-
-## 2026-10-12 — one vacancy row per dedup key
-
-**What changed.** `vacancy.dedup_key` was under a plain index; migration 160
-makes it unique (`WHERE dedup_key IS NOT NULL`) after folding the duplicates
-already stored. `KnowledgeBaseWriter._write_vacancy` turns the resulting
-IntegrityError into a merge into the row that won, and a fuzzy merge that would
-copy a key another row holds keeps the matched row's own key instead.
-
-**Why.** The installed database held 15,697 vacancies of which 242 keys were
-stored twice, every pair from the same adapter (`raw_document_id` shared
-in 155 pairs), all collected on 2026-10-04 between 14:20 and 15:07 UTC). The
-commit history starts on 2026-10-06, so how that run wrote them is not readable
-here. Two paths in the current writer can still produce it, and both are now
-reproduced by tests that fail without the change: a writer whose key lookup ran
-before another writer committed, and a fuzzy merge copying the incoming key onto
-a row while a second row already holds that key.
-
-**Which row survives.** The newest of each key (`collected_at`, then `id`). It is
-the row `vacancy_by_dedup_key` already returned, so every merge since the pair
-appeared went into it. Of the 242 older rows on the installed database, 228 had
-no opportunity, 4 had theirs only on the newer row, and 10 had an opportunity on
-both rows in the same campaign. `idx_opp_campaign_vacancy` allows one per
-campaign, so those 10 cannot be moved: an untouched copy (status `new`, not
-selected, pinned or ranked, nothing built on it) is deleted, and one the job
-seeker acted on is kept and only loses its vacancy link. All 10 on the installed
-database were untouched. Provenance follows the surviving row; embeddings of the
-deleted rows are dropped.
-
-**What it means for the numbers.** Vacancy counts fall by the number of folded
-rows (242 on the installed database) and the opportunity list of the campaigns
-concerned loses its duplicates. A posting stored under two different source URLs
-with the same title, employer, place and week keeps one URL: 10 of the 242 pairs
-were such, and the writer already treated each as one posting.
-
-**What would reverse it.** Dropping the unique index brings back a plain one; the
-rows deleted by migration 160 are only in a backup taken before it ran.
-
-## 2026-11-04 — the semantic index can live in Qdrant, off by default
-
-**What.** `DREAMJOB_SEMANTIC_BACKEND=qdrant` sends the vectors to a Qdrant
-server (`pipeline/semantic_qdrant.py`) instead of the `embedding` table. The
-default stays `sqlite`; nothing changes for an installation that doesn't set
-the flag. `qdrant-client` is an optional dependency (`pip install -e .[qdrant]`).
-
-**Why.** The SQLite store ranks every candidate in Python. That's fine at the
-size this product runs at, and it stays the reference. Qdrant is there for a
-deployment that already runs one, or that wants the index outside the process.
-
-**What a number means.** Nothing moved. The collection uses `Distance.COSINE`,
-so the similarity is the same cosine in -1..1 as `semantic.cosine`, rounded to
-4 places. The content-hash skip is keyed by model on both paths, so a model
-switch re-embeds everything (a first version of the Qdrant path ignored the
-model and kept stale vectors; `test_changing_the_model_re_embeds_everything`
-pins the fix). One collection holds one model: switching to a model with a
-different dimension means dropping the collection first.
-
-**Revisit if** the collection name should carry the model (or its dimension)
-so two models can coexist, or if `semantic.search` ever gets a caller and needs
-the same dispatch.
-
-## 2026-11-08: digest counts are totals, not the length of the fetched page
-
-**What changed.** `monitoring/digest.py:build` read each section's count as
-`len()` of a list fetched with `LIMIT 24` (`SECTION_LIMIT * 3`). The counts now
-come from `pipeline_cards.digest_counts`, one `COUNT(*)` per section over the
-same FROM and WHERE as the list query. The "N drafted replies are waiting"
-sentence in the recommended action reads the same total.
-
-**What it means for the numbers.** `digest.counts` (stored with every digest
-and shown in the digest history table), the `HEADING (N)` line and the
-"... and N more" line used to stop at 24. A week with 41 new opportunities read
-"NEW OPPORTUNITIES (24)" and "... and 16 more"; it now reads 41 and 33. Digests
-already stored keep their old counts. `stage_changes` and
-`silent_applications` were never capped and are unchanged.
+The digest read each section's count as `len()` of a list fetched with
+`LIMIT 24`, so 41 new opportunities showed as 24. Counts now come from one
+`COUNT(*)` per section (`pipeline_cards.digest_counts`). Stored digests keep
+their old counts.
 
 ## 2026-11-08: the knowledge-base half of the synthesis pool is not capped
 
-**What changed.** `opportunities.vacancies_for_companies`, the FR-342 reuse
-path that `campaign_vacancy_pool` merges with the campaign's own vacancies, kept
-the newest 5,000 rows. It now returns all of them, binding the company ids 500
-at a time, still newest first.
-
-**What it means for the numbers.** A repeat campaign over companies with more
-than 5,000 recent vacancies in the knowledge base synthesised from at most
-5,000 of them, and `SynthesisReport.dropped_over_cap` never counted the rest.
-Measured on a test pool of 5,200: 5,000 before, 5,200 after. The campaign's own
-`max_opportunities` cap still applies after this, and is still reported. A
-campaign that touched more than 32,766 companies used to fail this query on
-SQLite's variable limit; it now reads them in chunks.
+`vacancies_for_companies` kept the newest 5,000 rows, and a pool of 5,200 came
+back as 5,000. It now returns all of them, binding company ids 500 at a time
+(SQLite stops at 32,766 variables). The campaign's own `max_opportunities` cap
+still applies and is still reported.
 
 ## 2026-11-08: learned scoring weights stay inside their band
 
-**What changed.** `scoring.learn_weights` clamped each proposed weight to
-0.3x..2.5x its default and then normalised the total, which moved the weights
-out of the band again. It now uses `normalise_within_band`, which pins a weight
-that leaves its band to the edge and rescales only the others.
-
-**What it means for the numbers.** Feedback where only `profile_fit` separates
-kept from rejected rows took it to 2.86x its default after five learning rounds
-(and up to 3.19x, a weight of 0.70, at the extreme). It now stops at 2.5x
-(0.55). Weights already saved keep their values until the next learning run.
-The weights a seeker sets by hand and the FR-425 outcome nudge in
-`postapp/outcomes.py` do not go through this path and are unchanged.
+`learn_weights` clamped to 0.3x..2.5x of the default and then normalised, which
+pushed `profile_fit` to 2.86x. It now uses `normalise_within_band`, which pins a
+weight at its edge and rescales only the others, so it stops at 2.5x (0.55).
 
 ## 2026-11-18: stale vacancies that no opportunity uses are deleted
 
-**What changed.** A new scheduler task, `vacancy_purge`, runs once a day. It
-deletes every vacancy that no opportunity points at and that nobody has seen
-for the vacancy staleness window, never less than 7 days
-(`PURGE_MIN_DAYS` in `pipeline/knowledge_base.py`). Their `provenance` and
-`embedding` rows go with them. `scripts/purge_unlinked_vacancies.py` does the
-same by hand, counts by default, and backs the database up before `--apply`.
-`DREAMJOB_VACANCY_PURGE_SECONDS=0` turns the task off.
-
-**Why.** Until now nothing ever deleted a vacancy. On the development database
-on 2026-11-18 there were 17,323 vacancies; 14,626 were linked to no opportunity,
-and 12,918 of those had not been seen for more than 7 days, most of them from a
-single board sweep on 2026-10-04 that no task re-reads. The app already treats
-such a row as stale: dedup compares only against fresh rows and `fresh_only`
-search hides it. Keeping it only made the table, the full-text index and the
-`provenance` table (353,233 rows for those vacancies) grow. All 14,626 were
-removed by hand the same day, the equivalent of `--days 0 --apply`, with a
-backup kept next to the database.
-
-**What it does not touch.** A vacancy behind an opportunity is kept at any age,
-so no ranked list loses its source posting. A fresh vacancy is kept even when
-unlinked, because a campaign may still rank it. The 7-day floor is there
-because the staleness policy accepts 0 days, and read literally that would let
-the daily task delete postings the moment they are stored.
-
-**What would reverse it.** Setting `DREAMJOB_VACANCY_PURGE_SECONDS=0`. Rows
-already deleted come back only from a backup.
+A daily `vacancy_purge` task deletes vacancies that no opportunity points at and
+that nobody has seen for the staleness window, never under 7 days, with their
+provenance and embeddings. `scripts/purge_unlinked_vacancies.py` does the same by
+hand (counts by default, backs up before `--apply`);
+`DREAMJOB_VACANCY_PURGE_SECONDS=0` turns the task off. A vacancy behind an
+opportunity is kept at any age. On the development database, 14,626 of 17,323
+vacancies were unlinked.
 
 ## 2026-11-18: the CR-410 consent names the model API in use
 
-**What changed.** The `llm_transfer` consent text no longer says "the DeepSeek
-API" whatever the configuration. `consent_text()` in
-`security/auth_service.py` names the host of `DEEPSEEK_BASE_URL`, plus the host
-of `DREAMJOB_FALLBACK_LLM_BASE_URL` when `DREAMJOB_FALLBACK_LLM_API_KEY` is set
-(without a key the fallback is never called). Known hosts get a name ("the Groq
-API (api.groq.com)"); an unknown one is shown as its host. The same text is
-shown, stored with the decision, and quoted in `ConsentRequired`.
-
-**Why.** The development install sends prompts to Groq through the
-OpenAI-compatible endpoint, with DeepSeek behind it as a paid fallback. The
-screen asked the job seeker to agree to a transfer to DeepSeek alone, which was
-not the transfer taking place.
-
-**What it does not change.** Who must consent, and when: the gate is the same.
-A consent recorded before this change keeps the text it was given with, so the
-record still says what was agreed to at the time. Changing the endpoint later
-does not reset an existing consent; the stored text shows which provider it
-covered.
+The consent text names the host of `DEEPSEEK_BASE_URL`, plus the fallback host
+when a fallback key is set, instead of always saying "the DeepSeek API". The text
+shown is the text stored with the decision. Changing the endpoint later doesn't
+reset an existing consent.
 
 ## 2026-11-20: deepseek-flash for both roles, thinking off for cheap calls
 
-**What changed.** DeepSeek retired `deepseek-chat` and `deepseek-reasoner`; its
-model list now has `deepseek-flash` (DeepSeek-V4.1-Flash) and the dearer
-`deepseek-v4-pro`. Every default that named the old models now names
-`deepseek-flash`, for the cheap and the strong role, main and fallback
-(`config.py`, `.env.example`). With one model name for both roles, the role
-travels in the request instead: `llm.client.thinking_switch` sends
-`"thinking": {"type": "disabled"}` on cheap calls and `"enabled"` on strong
-ones, and only to `api.deepseek.com`, since Groq and a local model don't know
-the field. The response-cache key now includes the role.
+DeepSeek retired `deepseek-chat` and `deepseek-reasoner`, so `deepseek-flash`
+takes both roles, main and fallback. The role travels in the request:
+`llm.client.thinking_switch` turns thinking off on cheap calls and on for strong
+ones, only for `api.deepseek.com`. On `classify.employer_kind` (7 labelled sites,
+2 repeats) thinking gave the same 14/14 verdicts for 2.4x the output tokens and
+cut 4 of 14 calls at the 900-token cap. The response-cache key includes the role,
+so a strong retry isn't served the cached cheap answer, and the fallback picks
+its model from the role. Known limit: pinning a task to "Cheap" in the admin
+screen changes nothing while DeepSeek is the main endpoint.
 
-**Why thinking is off for cheap calls.** Flash thinks unless told not to. On
-`classify.employer_kind`, the cheap task with the tightest budget (900 tokens),
-measured on the 7 labelled sites of `tests/fixtures/employer_kind` with the
-rung's own prompt and validator, 2 repeats each, 20 November 2026:
+## 2026-11-20: the FR-425 outcome nudge moves the weights the scorer reads
 
-| deepseek-flash | thinking off | thinking on |
+The nudge was filed under column names (`score_plausibility`) while the scorer
+reads `plausibility`, started from 1.0 instead of the stored weight, and ignored
+the band, so applying the learning changed no ranking. It now uses the component
+names, starts from the weights in use and is saved through
+`normalise_within_band`. Plausibility or reachability moves at most 15% per
+application and can't leave 0.3x to 2.5x of its default.
+
+## 2026-11-20: unit tests can't reach the internet
+
+A campaign run ends in passes that look up every employer. Tests that didn't stub
+them waited on the real internet at the per-domain pace: 59 s for one test, 63 to
+71 minutes for the suite. `tests/unit/conftest.py` refuses name resolution and
+socket calls to every host but loopback, so a missed stub is a fast failed lookup.
+The suite runs in about 9 minutes.
+
+## 2026-11-20: helpers that were written and never called are wired
+
+A finished collection fills the country of country-less companies from where most
+of their postings are, so the planner drops more out-of-scope companies. The
+Apply Browser selection status follows the package (generating, ready, failed,
+approved, sent). A finished campaign restamps its browser-collected contacts from
+its real end plus the grace period (NFR-303). A new campaign takes the default
+persona, and another seeker's persona is refused. Expired OAuth states are purged
+when a new one is created. Digests are one per seeker per calendar day, not per
+second.
+
+## 2026-11-20: Google Calendar can be connected
+
+`/api/pipeline/calendar/authorize` stores a single-use state and
+`/api/pipeline/calendar/callback` exchanges the code. The redirect is
+`GOOGLE_CALENDAR_REDIRECT_URI`, never a value sent by the client. There is no
+screen for it yet. Yahoo isn't built: it would need CalDAV with an app password.
+
+## 2026-11-20: no built-in sender, owner address or crawler contact
+
+The repo is public, so no personal address is built in. The sender is
+`DREAMJOB_MAIL_FROM`, the administrator `DREAMJOB_OWNER_EMAIL` and
+`DREAMJOB_OWNER_NAME`, and the crawler appends `(contact: ...)` to its
+`User-Agent` only when `DREAMJOB_CRAWLER_CONTACT` is set. With no sender the
+Resend backend reports itself unavailable. Resend can't send as an `@gmail.com`
+address, so sending as Gmail goes through the Gmail connection.
+
+## 2026-11-20: third-party XML goes through defusedxml
+
+Personio, Teamtailor, the Actiris sitemap and RSS are parsed by
+`pipeline/safe_xml.py`, which refuses entity declarations (billion laughs,
+external entities) and reports them as the `ParseError` the adapters already
+handle.
+
+## 2026-11-22: the employer-kind helpers are wired
+
+`work_queue` orders each pass suspicion first, then vacancy count: the queue is
+still chosen by vacancy count, then `resolve_many` walks it as the detector
+ranks it, so a pass that stops early has covered the suspected agencies first.
+`registry_signals` feeds R1 and D6 into `Signals.with_signals` after the registry
+rung, and the recomputed band replaces the stored rung-0b snapshot. An ambiguous
+register name is stored as `cannot_tell(registry_ambiguous)` with the candidate
+rows (`ambiguity_verdict`). `read_signals` puts the stored snapshot in the
+`/employers/{id}/kind` payload as `free_signals`. Verdicts don't change, since
+only a rung's own evidence decides.
+
+Measured on the 43 labelled employers with the register's answer simulated from
+each label source (no live register run was possible):
+
+| Band | Before | After |
 |---|---|---|
-| correct verdicts | 14/14 | 14/14 |
-| first calls cut at the 900-token cap | 0 | 4 of 14 (each retried on the strong role) |
-| output tokens, first call, mean | 257 | 615 |
-| latency, first call, median | 2.1 s | 3.7 s |
+| probable and above | P 1.00, R 0.55 | P 1.00, R 0.65 |
+| possible and above | P 1.00, R 0.85 | P 1.00, R 0.90 |
+| direct employers newly tagged as agency | none | none |
 
-Thinking bought nothing on that task and cost 2.4x the output tokens. Strong
-calls keep it, which is what the reasoner gave them. In thinking mode DeepSeek
-ignores `temperature`, so a strong call's temperature has no effect.
+Seven employers change band, none towards agency among the direct ones. Detail in
+`docs/Employer_Kind_Results.md` section 9.
 
-**Why the cache key changed.** `classify.employer_kind` is cached and retries a
-badly shaped answer on the strong role. With the same model name on both
-roles, the retry would have been served the cached cheap answer it was meant
-to replace (`tests/unit/test_llm_thinking.py`).
+## 2026-11-23: a privacy-routed LLM task never reaches the cloud
 
-**What it does not change.** The development `.env` sends the main calls to
-Groq (`openai/gpt-oss-20b` and `-120b`), which get no `thinking` field. Only
-the paid DeepSeek fallback, and an install pointed at DeepSeek, are affected.
-The measured figures in `E2E_1500_Verification.md`,
-`Employer_Kind_Results.md` and `Agency_Research_Design.md` were taken on
-`deepseek-chat` and `deepseek-reasoner` and stay as written. The fallback now
-takes its model from the call's role rather than from comparing model names,
-which can no longer tell the roles apart.
+A task listed in `DREAMJOB_LOCAL_LLM_TASKS` (profile, CV, motivation, NFR-306)
+went to the local model, but when that call failed the client tried the paid
+fallback endpoint with the same prompt, and with no local URL set the task went
+to the cloud without a word. Both defeated the listing. Now a privacy-routed
+call never gets the fallback endpoint, and a listed task with no local URL raises
+an `LLMError` that says so. Tasks that aren't listed behave as before. This
+matches the DPIA, which presents the local model as the way to remove the
+transfer entirely for these steps.
 
-**Known limit.** The admin screen pins a task to a model *name*
-(`task_models`), and the call's role still comes from the task. With
-`deepseek-flash` on both roles, pinning a strong task to "Cheap" changes
-nothing, thinking included, and the two options in `TaskRouting.jsx` read the
-same. It only matters when DeepSeek is the main endpoint; giving the strong
-role another name (`deepseek-v4-pro`) brings the choice back. Storing a role
-instead of a name would touch the admin API, the screen and the stored
-settings, so it waits until an install needs it.
+
+## 2026-11-23: a reasoning model that runs out of budget gets a second try
+
+On Groq's gpt-oss models the reasoning counts against `max_tokens`. A cheap call
+such as `classify.employer_kind` (900 tokens) could use all of it and come back as
+`400 json_validate_failed` with an empty `failed_generation`; the client treated
+a 400 as final and, with no fallback key, the employer got no verdict. Cheap calls
+to Groq gpt-oss now send `reasoning_effort: "low"` (strong calls keep the
+default), and a `json_validate_failed` 400 is retried once on the same endpoint
+with twice the `max_tokens` (up to 8,192). If that fails too, the call raises as
+before and the website rung retries once on the strong model. The "LLM endpoint
+failed" warning and the `LLMError` now carry the provider's status, error code and
+the first 300 characters of the response body, never the request headers or the key.

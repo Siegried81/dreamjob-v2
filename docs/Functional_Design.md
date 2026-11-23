@@ -1,4 +1,4 @@
-# Dream Job — Functional Design
+# Dream Job: Functional Design
 
 **AI-assisted job discovery and application platform**
 
@@ -16,9 +16,9 @@
 ## 1. Purpose and reading guide
 
 The SRS says *what* Dream Job must do. This document says *how the product
-behaves* — the screens, the states, the decisions the system makes on its own,
-and the decisions it deliberately leaves to the job seeker. It is the reference
-for acceptance testing and for anyone who has to explain the product to a user.
+behaves*: the screens, the states, what the system decides on its own and what
+it leaves to the job seeker. Use it for acceptance testing and to explain the
+product to a user.
 
 Requirement identifiers from the SRS are cited inline (FR-xxx, NFR-xxx, CR-xxx).
 Section 12 summarises requirement coverage and how to regenerate the
@@ -33,11 +33,10 @@ in a box like this:
 
 ## 2. The product in one page
 
-Most job search tools react to what has been published. Dream Job starts from
-who the job seeker is and what they actually want, maps the relevant slice of
-the market — including companies that have not advertised — judges each
-company's capacity and likelihood to hire, and then removes the friction of
-applying.
+Dream Job helps a job seeker find work and apply for it. It starts from who
+the job seeker is and what they want, maps the part of the market that matters,
+including companies that haven't advertised, works out which ones can pay and
+are likely to hire, and prepares the applications.
 
 The system is opinionated about scope: it collects what the directives justify
 rather than downloading the world.
@@ -51,7 +50,7 @@ Three properties shape every screen:
    every decision to apply (NFR-305). There is no path through the product in
    which a message reaches a stranger without a human approving it.
 3. **Nothing is hidden.** Sub-scores, provenance, sample sizes, the AI call log,
-   the cost so far — all of it is on screen. A user who disagrees with the
+   the cost so far: all of it is on screen. A user who disagrees with the
    ranking can see exactly what produced it.
 
 ---
@@ -92,8 +91,8 @@ Cool at the start (working out what you want), warm at the end (where messages
 actually leave the building).
 
 **The "Where I am" screen** renders this as a live map. Each of the sixteen
-stages reports one of five states — done, running, ready, **blocked and why**,
-or not started — with real counts, and links to the screen that advances it.
+stages reports one of five states (done, running, ready, **blocked and why**,
+or not started) with real counts, and links to the screen that advances it.
 A blocked stage never just says "not done"; it says what would unblock it,
 because the commonest way to get lost in a sixteen-stage pipeline is not knowing
 the next move. A one-line version of the same map sits at the top of every
@@ -101,7 +100,7 @@ working screen.
 
 ---
 
-## 5. Phase 1 — Profile
+## 5. Phase 1: Profile
 
 ### 5.1 Intake (FR-102, FR-103)
 
@@ -110,9 +109,9 @@ Two documents go in.
 **The LinkedIn export.** The section structure of LinkedIn's "Save to PDF" is
 the base schema of the profile (FR-102): Contact, Summary, Top Skills,
 Languages, Experience, Education, Certifications, Publications, Projects,
-Honors, Volunteering, Recommendations. The parser is deterministic first — the
+Honors, Volunteering, Recommendations. The parser is deterministic first (the
 export places contact details in a narrow left column that interleaves with the
-body text, so extraction works from word x-positions rather than reading order —
+body text, so extraction works from word x-positions rather than reading order)
 with LLM extraction as the fallback for passages the splitter cannot segment.
 
 **The CV**, as PDF or DOCX. Sections, dates, employers and titles are extracted,
@@ -126,7 +125,7 @@ CV produce 8 experience entries, 27 top skills, 4 languages, 3 publications, a
 
 The two documents disagree, and the system says so rather than silently picking
 one. Every disagreement over a date, title or employer becomes a **conflict**
-the job seeker resolves — LinkedIn value, CV value, or a manual override.
+the job seeker resolves, LinkedIn value, CV value, or a manual override.
 
 *Verified:* the real pair produces **18 conflicts**, including the employer
 naming (`NGA Human Resources` vs `Alight Solutions (formerly NGA Human
@@ -157,15 +156,15 @@ Flagged fields are excluded from every generated document **and stripped before
 any prompt leaves the machine** (CR-410). The screen states both plainly. This
 is the mechanism for a date of birth, a photo, or a current salary.
 
-### 5.5 Composite profile (FR-121–FR-127)
+### 5.5 Composite profile (FR-121 to FR-127)
 
 An LLM synthesises the user-supplied data and verified online findings into the
 canonical representation used for matching and generation: narrative summary,
 career trajectory, core and adjacent competencies, seniority, domains,
 achievements, public footprint, inferred preferences, constraints.
 
-**Every statement carries its source** — user input, LinkedIn export, CV, or a
-specific URL — and the screen makes each one traceable and editable (FR-125).
+**Every statement carries its source**: user input, LinkedIn export, CV, or a
+specific URL, and the screen makes each one traceable and editable (FR-125).
 
 **Online enrichment** (FR-122) searches for the job seeker using name,
 employers, locations and declared handles as anchors: personal site,
@@ -189,19 +188,19 @@ signals, each recorded separately:
 
 Findings are classified **confirmed / probable / doubtful**. Only *confirmed*
 merges automatically (FR-124). Probable and doubtful are presented with their
-evidence for the job seeker to confirm or reject, and **a rejection is permanent** —
+evidence for the job seeker to confirm or reject, and **a rejection is permanent**,
 the finding is never proposed again.
 
 Enrichment can be switched off entirely (FR-126), in which case no request
 leaves the machine and the composite profile is built from the documents alone.
 
-**Special-category data** (FR-127) is never stored — health, political opinions,
+**Special-category data** (FR-127) is never stored: health, political opinions,
 religion, sexual orientation, trade-union membership.
 
 > **Decision.** The filter distinguishes the *person* from the *vocabulary*. An
 > earlier keyword sweep deleted "healthcare data company", "medical devices",
 > "Political Science" and "human rights platform" from ordinary professional
-> histories — protecting nobody while destroying exactly the careers that need
+> histories, protecting nobody while destroying exactly the careers that need
 > representing. Detection now runs three tiers: an occupational sense wins
 > outright; an assertion about a person ("diagnosed with", "member of the X
 > party") is removed; a bare category noun is removed unless the sentence is
@@ -221,14 +220,14 @@ speculative openings and scoring.
 
 *Verified against a real statement:* deal-breakers come back structured with a
 `hard` flag and a `detectable_from` list naming which opportunity fields can
-evidence them — which is what makes them usable in scoring rather than
+evidence them, which is what makes them usable in scoring rather than
 decorative.
 
 ---
 
-## 6. Phase 2 — Plan
+## 6. Phase 2: Plan
 
-### 6.1 Directives (FR-141–FR-149)
+### 6.1 Directives (FR-141 to FR-149)
 
 Directives bound the campaign. They are **structured controls, not free text**
 (FR-141), because they have to translate reliably into each source's own query
@@ -253,26 +252,26 @@ likely to expose the search; and suppresses LinkedIn actions that signal job
 hunting. It is indicated in a bar across the whole interface, not buried in
 settings.
 
-### 6.2 Campaign planning (FR-161–FR-166)
+### 6.2 Campaign planning (FR-161 to FR-166)
 
 The planner reads the source catalogue, selects sources the directives and
-coverage metadata justify (FR-164 — no Asian boards for a Benelux search), and
+coverage metadata justify (FR-164, no Asian boards for a Benelux search), and
 has an LLM generate each source's **native query form** grounded in the
 composite profile, the directives and the dream job model.
 
 **Before anything runs**, the job seeker sees the whole plan: sources, queries,
-expected volume, estimated duration, estimated cost — and can edit or exclude
+expected volume, estimated duration, estimated cost, and can edit or exclude
 any source (FR-163).
 
 **Knowledge-base reuse (FR-342)** is reported concretely before launch: per
 entity type, how many records are reused versus scheduled, and the time and cost
-avoided. Staleness defaults follow FR-343 across **ten entity types** —
+avoided. Staleness defaults follow FR-343 across **ten entity types**,
 vacancies 7 days, hiring signals and events 30 days, company websites 90 days,
 contacts, competitor links and employer-kind verdicts 180 days, filings 1 year,
 and salary observations nearly 4 years. Every value is administrator-editable and
 stored with the installation's other settings.
 
-### 6.3 Collection (FR-181–FR-186)
+### 6.3 Collection (FR-181 to FR-186)
 
 **Thirty-six adapters** over a common four-step contract:
 
@@ -303,13 +302,13 @@ the 2,227 boards read) rather than assuming every slug resolves.
 
 Collection runs as **resumable background jobs** with per-adapter progress,
 error counts, pause, resume and cancel. A crash loses at most the page in flight.
-Every plan item reports one of **six measured outcomes** — succeeded, blocked,
-gone, failed, skipped, capped — so "no vacancies" is never confused with "the
+Every plan item reports one of **six measured outcomes** (succeeded, blocked,
+gone, failed, skipped, capped) so "no vacancies" is never confused with "the
 source broke", and a register's "no" is recorded as an answer. Per-domain
 rate-limit buckets let independent sources run concurrently while a single host
 stays politely paced.
 
-Explicit caps bound every job — pages, companies, people, wall-clock duration —
+Explicit caps bound every job (pages, companies, people, wall-clock duration)
 and an administrator's per-source cap is a ceiling a campaign cannot raise.
 
 **Sources whose terms restrict automated access ship disabled by default** and
@@ -319,11 +318,11 @@ adapter are enabled but still wait for that acknowledgement before they run; a
 prohibited source is a refusal the pipeline records rather than an error it
 retries (NFR-403).
 
-### 6.4 Browser automation (FR-201–FR-208)
+### 6.4 Browser automation (FR-201 to FR-208)
 
 LinkedIn and Glassdoor defend against automation. Rather than circumventing
 that, the system attaches to a browser **the user launched and logged into
-themselves** — a Chromium browser over the Chrome DevTools Protocol, or Firefox
+themselves**, a Chromium browser over the Chrome DevTools Protocol, or Firefox
 through a Playwright persistent context, each on a dedicated profile directory
 that keeps the user's normal browser untouched.
 
@@ -342,8 +341,8 @@ password, consent and captcha controls are removed on the way in.
 - The user can watch, pause, and skip individual targets (FR-206).
 
 **The same session also pre-fills ATS application forms (FR-328).** On request
-the automation maps a company's application controls to canonical fields —
-name, contact details, work history, the cover field — and uploads the approved
+the automation maps a company's application controls to canonical fields (
+name, contact details, work history, the cover field) and uploads the approved
 CV. It **never clicks submit**, never touches a password, consent or captcha
 control, and pauses so the applicant completes and sends the form themselves.
 Contacts gathered this way carry a retention deadline (30 days by default) and
@@ -360,9 +359,9 @@ are erased with the campaign unless an administrator has opted into sharing
 
 ---
 
-## 7. Phase 3 — Discover
+## 7. Phase 3: Discover
 
-### 7.1 Company profiling (FR-221–FR-226)
+### 7.1 Company profiling (FR-221 to FR-226)
 
 A bounded crawl of the company's own site, prioritised by a URL scorer so a
 30-page budget is spent on the pages that matter: about, products, customers and
@@ -376,18 +375,18 @@ or a derived host that is only written once it actually answers. A candidate
 that resolves to a namesake is recorded as refused rather than quietly used, and
 an unresolved company is written down as a finding instead of being dropped.
 
-Profiles are then built to a **fixed seventeen-section schema** (FR-222) —
+Profiles are then built to a **fixed seventeen-section schema** (FR-222),
 identity and legal identifiers, business summary, sector codes, size, locations,
 structure and departments, key people, references, financial summary, hiring
 signals, competitors, review signals, sources, and so on. Every field carries
 confidence and provenance (NFR-402); low-confidence fields are visibly flagged.
 
 For larger companies a **departmental map** (FR-223) shows business units,
-functions, locations and, where known, the head of each — which is what turns
+functions, locations and, where known, the head of each, which is what turns
 "apply to this company" into "apply to this department".
 
-Enrichment runs as one guarded pass — domains, employer kind, website profile,
-hiring signals, review signals, financials — so a company discovered mid-campaign
+Enrichment runs as one guarded pass (domains, employer kind, website profile,
+hiring signals, review signals, financials) so a company discovered mid-campaign
 arrives complete without the job seeker visiting six screens. It never turns a
 single failed rung into a failed run. Review signals (FR-265, FR-384) are read
 from the company's own pages (schema.org `aggregateRating`) with no extra egress
@@ -400,14 +399,14 @@ reaches the model as fenced, explicitly-labelled untrusted data.
 Profiles are **shared across job seekers** and refreshed incrementally (FR-226).
 Registry identity is checked at the register: a company is matched, reported
 **ambiguous** with its candidate set, found to have no match, or recorded
-unavailable — the last three are answers, and a register's "no" is never
+unavailable, the last three are answers, and a register's "no" is never
 mistaken for a broken source (FR-403).
 
 ### 7.2 Competitors and signals (FR-224, FR-225, FR-402)
 
-Competitors are found by combining signals — shared sector codes, shared
+Competitors are found by combining signals (shared sector codes, shared
 customers, press co-mentions, similar product descriptions, directory
-classifications — because no single one is reliable enough to reach the three
+classifications) because no single one is reliable enough to reach the three
 suggestions per company the acceptance criteria ask for.
 
 **Hiring signals** are recorded with dates and sources: headcount growth, new
@@ -416,7 +415,7 @@ intelligence** (FR-402) detects events that typically precede hiring and
 recommends an application window; opportunities where the moment is favourable
 are flagged in the ranked list.
 
-### 7.3 Financial analysis (FR-241–FR-246)
+### 7.3 Financial analysis (FR-241 to FR-246)
 
 Five years of filings per company, from the registry for its jurisdiction.
 
@@ -429,7 +428,7 @@ Computed: revenue and headcount CAGR, margin trends, **personnel cost per FTE**
 (the pay-level proxy), liquidity and solvency ratios, and a trajectory
 classification with confidence.
 
-Then two 0–100 scores — **ability to pay** and **investment capacity** — each
+Then two 0-100 scores, **ability to pay** and **investment capacity**, each
 with a rationale that **cites the figures used**. A rationale that names no
 numbers is treated as a defect.
 
@@ -452,30 +451,30 @@ inconsistencies flagged rather than silently accepted (NFR-404).
 > retrieval at 60 an hour, so German companies fall through to the FR-245
 > estimated path.
 
-### 7.4 Opportunities (FR-261–FR-265)
+### 7.4 Opportunities (FR-261 to FR-265)
 
 Every collected vacancy is normalised into an opportunity. For every interesting
 company **without** a matching vacancy, an LLM generates **speculative
 openings** (FR-262): roles the company is likely to need or able to create in
-the next 6–12 months, from its profile, hiring signals, financial capacity,
+the next 6-12 months, from its profile, hiring signals, financial capacity,
 department map, competitors' hiring, and the job seeker's own profile. Each
 carries a plausibility score and a rationale.
 
 > **FR-263 is a hard rule that reaches into the email text.** A speculative
-> opening is visibly distinct in every view — its own colour, outside the five
-> phase hues, plus an explicit badge — and the introduction email is written as
+> opening is visibly distinct in every view (its own colour, outside the five
+> phase hues, plus an explicit badge) and the introduction email is written as
 > a spontaneous application that **never asserts a vacancy exists**.
 
 Compensation estimates (FR-264) come with a confidence and a source list, drawn
 first from posted ranges on similar vacancies in the collected corpus, which is
 the most defensible source available.
 
-### 7.5 Scoring and ranking (FR-281–FR-285, FR-383)
+### 7.5 Scoring and ranking (FR-281 to FR-285, FR-383)
 
 Seven weighted sub-scores: profile fit, dream-job fit, directive fit, company
 attractiveness, compensation fit, plausibility, and reachability. **Every**
-opportunity is scored on all seven — plausibility is 1.0 for an advertised
-vacancy and a model judgement for a speculative opening — so a weight never
+opportunity is scored on all seven, plausibility is 1.0 for an advertised
+vacancy and a model judgement for a speculative opening, so a weight never
 silently changes meaning between the two kinds of row.
 
 Company attractiveness is deterministic and now reads four financial and
@@ -489,12 +488,12 @@ dimensions are excluded from scoring by name rather than scored low.
 **Ranking is two-stage.** A deterministic pre-rank orders the whole corpus
 cheaply, then the model is asked to refine only the top slice (500 by default),
 with an explicit coverage report accounting for every row that was and was not
-model-scored. Dream-job fit itself is a blend — a 0.6 semantic component and a
-0.4 deterministic component — so a model outage degrades the score rather than
+model-scored. Dream-job fit itself is a blend, a 0.6 semantic component and a
+0.4 deterministic component, so a model outage degrades the score rather than
 removing it.
 
 > **Decision.** Sub-scores are computed **deterministically** wherever the
-> question is factual — skill overlap, distance, band membership, financial
+> question is factual: skill overlap, distance, band membership, financial
 > scores. The LLM is used for the semantic dream-job component and for the
 > written rationale. This makes the ranking reproducible, cheap, and explainable
 > in terms a user can argue with.
@@ -503,7 +502,7 @@ Every score is explainable: the sub-scores and a one-paragraph rationale are on
 screen (FR-282).
 
 The **dream-job fit meter** (FR-383) is deliberately separate from the overall
-score, listing criteria met, partially met and violated — because a role can
+score, listing criteria met, partially met and violated, because a role can
 suit a CV perfectly and still not be what the person wants.
 
 **User control (FR-284).** Check, pin, drag to re-order, mark not interested
@@ -529,7 +528,7 @@ than zero.
 > raw cosine is not calibrated across embeddings models. With it off, the
 > embedder is never called and every score is unchanged.
 
-### 7.6 Employer kind — agencies, boards and undisclosed employers
+### 7.6 Employer kind: agencies, boards and undisclosed employers
 
 Not every posting is the employer. Interim agencies, staffing groups and
 recruitment boards advertise on their client's behalf, sometimes without naming
@@ -552,8 +551,8 @@ model read. Two rules give it teeth:
   the page before it is trusted, with confidence capped below certainty and
   instruction-shaped content quarantined as untrusted.
 
-A separate per-posting override recognises a strict on-behalf clause — "our
-client is", "onze klant", "unser Mandant ist" — and may move a posting **up** to
+A separate per-posting override recognises a strict on-behalf clause ("our
+client is", "onze klant", "unser Mandant ist") and may move a posting **up** to
 agency; nothing may move it down. In the interface an undisclosed employer is a
 first-class state, not a blank: it carries a badge and a disclosure sentence in
 English, Dutch and French, its company dimensions are excluded from scoring
@@ -568,9 +567,9 @@ company's name were known.
 
 ---
 
-## 8. Phase 4 — Apply
+## 8. Phase 4: Apply
 
-### 8.1 Hiring contacts (FR-301–FR-306)
+### 8.1 Hiring contacts (FR-301 to FR-306)
 
 Priority: the hiring manager of the relevant department where identifiable, then
 talent acquisition, then a generic careers mailbox. The manager is derived from
@@ -591,8 +590,8 @@ home page stopped being where an address lives: the pages the home page links
 to; the site's own **sitemap**, which names the contact and team pages a
 JavaScript shell does not link; **schema.org JSON-LD** (`Organization.email`,
 `contactPoint`, `Person.email` on a team page); and an RFC 9116
-**`security.txt`**. A fifth source — a **search API** (Brave, Bing or Google
-CSE, administrator-configured) — exists because large corporate sites answer
+**`security.txt`**. A fifth source (a **search API** (Brave, Bing or Google
+CSE, administrator-configured)) exists because large corporate sites answer
 every fetch with a bot-protection interstitial (F5/TSPD, Cloudflare, Incapsula),
 so our crawl sees no page at all. A search engine has already indexed those
 pages; the API result and its snippet are the only compliant way in, since the
@@ -601,7 +600,7 @@ challenge is detected the company is recorded as **blocked** with that reason,
 rather than silently reported as having no address.
 
 **Addresses are found or inferred** (FR-303) from the company website, press
-pages, or pattern inference from other addresses on the same domain — and the
+pages, or pattern inference from other addresses on the same domain, and the
 method is recorded, because an inferred address deserves less confidence than a
 published one. Third-party lookup services remain behind a config flag that is
 off by default (OQ-05).
@@ -614,7 +613,7 @@ inconclusive probe is recorded as *unknown*, never as *valid*. Probes are
 rate-limited and cached per address (FR-305).
 
 **Introduction routes** (FR-302, FR-461) are ranked by the product of route
-strength and relevance across **six relationship types** — first-degree contact,
+strength and relevance across **six relationship types**, first-degree contact,
 former colleague, employer alumni, school alumni, shared community and
 second-degree contact. The message to the *intermediary* is a different artefact
 from the application itself, is routed to a model chosen for the intermediary
@@ -634,7 +633,7 @@ between job seekers (NFR-303).
 > a config flag, off by default; the built-in DNS and SMTP validation needs no
 > third party and no data-processing agreement.
 
-### 8.2 Generated material (FR-321–FR-331)
+### 8.2 Generated material (FR-321 to FR-331)
 
 Four artefacts per selected opportunity:
 
@@ -656,33 +655,33 @@ employer; an LLM judge contributes as one signal, not as the arbiter. A failed
 check visibly blocks approval. A leak scan (NFR-206) flags content attributable
 to no source in this job seeker's own provenance set.
 
-A **consistency failure can be overridden with a recorded reason** — the job
-seeker is the authority on their own history — and that override is persisted
+A **consistency failure can be overridden with a recorded reason**, the job
+seeker is the authority on their own history, and that override is persisted
 and honoured by both send paths, where a previous iteration lost it. A **leak**
 or an **objected contact** is not overridable. Speculative emails that imply a
 vacancy exists are blocked outright (FR-323).
 
 **Review and approval (FR-324).** Preview, edit (which re-opens the draft),
 regenerate with an instruction, approve or discard. Bulk approval opens a
-**mandatory summary of exactly what goes to whom** — recipient, company, role,
+**mandatory summary of exactly what goes to whom**: recipient, company, role,
 and whether the opening is real or speculative. The Apply browser can generate
 every package for a shortlist in one **pausable, resumable pass** with live
 progress and a per-package cost ceiling (NFR-502, NFR-401, NFR-104). When the
 packages are for the ATS route, the compose step produces a shorter
-application-specific email, and a **two-switch dry-run guard** — one environment
-variable and one administrator setting, failing closed — renders the `.eml`
+application-specific email, and a **two-switch dry-run guard**: one environment
+variable and one administrator setting, failing closed, renders the `.eml`
 without letting anything leave the machine.
 
-### 8.3 Dispatch (FR-325–FR-327)
+### 8.3 Dispatch (FR-325 to FR-327)
 
 Three backends behind one interface:
 
 | | Gmail OAuth | IMAP + SMTP (`imap_basic`) | Resend |
 |---|---|---|---|
-| Sends as | The job seeker's own mailbox | The job seeker's own mailbox (Yahoo, iCloud, ...) | `DREAMJOB_MAIL_FROM` (default `stephane@stepvda.com`) |
+| Sends as | The job seeker's own mailbox | The job seeker's own mailbox (Yahoo, iCloud, ...) | `DREAMJOB_MAIL_FROM`, an address on a domain verified at Resend (no default; Resend cannot send as a Gmail address, so sending as Gmail goes through the Gmail connection) |
 | Replies | Land in the inbox; detected by IMAP | Land in the inbox; read over IMAP | No inbox; webhook events |
 | Credentials | Refresh token, encrypted per job seeker, revocable | Application password, encrypted per job seeker | API key |
-| Scopes | `gmail.send` + `gmail.readonly` for bounce reading | — (API only: `POST /api/mail/imap/connect`) | — |
+| Scopes | `gmail.send` + `gmail.readonly` for bounce reading | n/a (API only: `POST /api/mail/imap/connect`) | n/a |
 
 A third connection, **Microsoft 365 / Outlook.com over Graph**, is read-only:
 it holds `Mail.Read`, `User.Read` and `offline_access` only, refuses a token
@@ -705,51 +704,51 @@ Every send is logged with recipient, timestamp, attachments, message-id and
 delivery status, and recorded in an immutable audit trail with who approved it
 (NFR-702). Bounces are detected by parsing DSN structure rather than
 string-matching subjects, and Resend's webhook events feed the same record.
-Follow-up reminders fire after a configurable silence — seven days by default,
+Follow-up reminders fire after a configurable silence, seven days by default,
 one reminder, always as a reply in the original thread (FR-327) so the sequence
 stays in one conversation rather than arriving as a fresh cold email.
 
 ---
 
-## 9. Phase 5 — Follow up
+## 9. Phase 5: Follow up
 
 ### 9.1 Recording responses
 
 > **Extension beyond the SRS**, at the product owner's request. Automatic
 > detection only covers replies arriving in a pollable mailbox. In practice many
 > do not: a recruiter phones, answers on LinkedIn, or replies through an ATS
-> portal — and Resend has no inbox at all.
+> portal, and Resend has no inbox at all.
 
 Any response can be **entered by hand** and is then treated exactly like a
 detected one: classified, moving the pipeline card, feeding the learning.
 
 The person entering it also states what they think happened. **That stated
-outcome overrides the model's classification** — they were there. Corrections
+outcome overrides the model's classification**: they were there. Corrections
 after the fact are one click, because a misread rejection quietly distorts every
 rate it is counted in.
 
 Recording a rejection is given exactly the same visual weight as recording good
 news. It is data, and the analysis needs it.
 
-### 9.2 The pipeline board (FR-421–FR-424)
+### 9.2 The pipeline board (FR-421 to FR-424)
 
-Five stages — sent, replied, interview, offer, closed — moved automatically by
+Five stages (sent, replied, interview, offer, closed) moved automatically by
 reply detection where possible and by hand otherwise. Automatic moves are
 deliberately conservative and never go backwards; nothing auto-closes. A closed
-card records *why* — accepted, rejected, withdrawn or no response — because the
+card records *why* (accepted, rejected, withdrawn or no response) because the
 closure outcome, not just the stage, is what the learning counts.
 
 Replies are classified (FR-422) as interest, information request, interview
-invitation, rejection, referral or auto-reply — with `other` as the honest
-fallback and a four-language rule-based pass when the model is unavailable — and
+invitation, rejection, referral or auto-reply, with `other` as the honest
+fallback and a four-language rule-based pass when the model is unavailable, and
 the appropriate response is **drafted in the same thread** using the briefing and
 motivation documents as context. Drafts wait for the job seeker; nothing sends
 itself.
 
-Where a reply proposes interview times (FR-423), the slots are extracted —
-including relative dates in four languages — checked against the connected
+Where a reply proposes interview times (FR-423), the slots are extracted,
+including relative dates in four languages, checked against the connected
 calendar, and the confirmation drafted, with the briefing attached to the
-calendar entry on approval. Google Calendar is wired end to end; a **Microsoft
+calendar entry on approval. Google Calendar connects through the API only (there is no screen for it yet); a **Microsoft
 365 Graph client is implemented** for the same flow but its OAuth exchange is
 not yet exposed, so it is not connectable without an app registration.
 
@@ -785,7 +784,7 @@ Three rules govern the advice:
 
 1. **The numbers come first, the model second.** Segment rates are computed
    deterministically. The model is handed that table and asked to turn it into
-   advice — it is never asked to find the pattern, because a language model
+   advice, it is never asked to find the pattern, because a language model
    asked to spot trends in a table will find one whether or not it is there.
 2. **Proposals are validated against the data.** A proposal naming a segment the
    job seeker never applied to is dropped, and the figures are re-attached from
@@ -796,27 +795,27 @@ Three rules govern the advice:
 
 Advice refuses to speak below roughly six resolved applications, and says so.
 A proposal that conflicts with the dream-job statement is **flagged, not
-hidden** — the data does not overrule what the person said they want; it only
+hidden**: the data does not overrule what the person said they want; it only
 reports what wanting it is costing.
 
 *Verified:* 8 data-engineering applications with 5 replies against 9
-data-science applications with 1 reply and 8 rejections — the weak segment is
+data-science applications with 1 reply and 8 rejections, the weak segment is
 identified, the stronger one proposed, and an invented segment is rejected.
 
-### 9.4 Monitoring (FR-401–FR-403)
+### 9.4 Monitoring (FR-401 to FR-403)
 
-Watched companies are rechecked on a configurable interval across five channels —
-careers pages, ATS boards, news, hiring signals and filings — for anything new.
+Watched companies are rechecked on a configurable interval across five channels (
+careers pages, ATS boards, news, hiring signals and filings) for anything new.
 Matching vacancies are scored and added to the ranked list automatically, and
 duplicate notifications are suppressed. Timing windows are recomputed as signals
 age. A weekly digest carries new opportunities, replies, follow-ups due,
 watchlist changes and **one** recommended next action, chosen by a priority
 ladder rather than a list the reader has to triage.
 
-The scheduler that runs all of this — vacancy refresh, job-alert e-mails, reply
+The scheduler that runs all of this (vacancy refresh, job-alert e-mails, reply
 and bounce polling, watchlist rechecks, automatic company enrichment, continuous
 collection (when switched on), geolocation, follow-ups, outcome learning, the
-digest, contact retention and log redaction — **autostarts inside the API process at
+digest, contact retention and log redaction) **autostarts inside the API process at
 boot** rather than waiting for a cron entry, and can be stopped, started or
 triggered per task from the monitoring screen. It also raises a readiness
 notification once enough outcomes have accumulated for the redirection analysis
@@ -824,10 +823,10 @@ to be worth reading.
 
 ---
 
-## 10. Dream-job intelligence (FR-381–FR-384, FR-443, FR-444)
+## 10. Dream-job intelligence (FR-381 to FR-384, FR-443, FR-444)
 
 - **Gap analysis (FR-381).** What separates the composite profile from the dream
-  job model — skills, experience, certifications, languages, leadership scope,
+  job model, skills, experience, certifications, languages, leadership scope,
   visibility. Each gap names a concrete closing action, an estimated effort, and
   **the opportunities where that gap was decisive**, computed from which
   opportunities lost points on that dimension rather than asserted.
@@ -837,7 +836,7 @@ to be worth reading.
 - **Values match (FR-384).** The company's derived values against those in the
   dream-job statement, with mismatches surfaced as explicit warnings on the
   company profile and in the motivation document.
-- **LinkedIn suggestions (FR-443).** Headline, About, skills, keywords — with
+- **LinkedIn suggestions (FR-443).** Headline, About, skills, keywords, with
   the keyword advice grounded in term frequency across the actual collected
   vacancies, not generic advice. Presented as editable text; the system never
   modifies LinkedIn.
@@ -868,7 +867,7 @@ that straddles the boundary depending on how the row was collected.
 > text. Correct when the operator is the sole data controller; it needs a policy
 > decision before a shared installation. Recorded in the DPIA.
 
-**Administration (FR-361–FR-364).** Campaign dashboard with per-source records,
+**Administration (FR-361 to FR-364).** Campaign dashboard with per-source records,
 errors, token consumption and cost; model selection, budgets, task routing and
 prompt templates; adapter enable/disable with the IR-101 acknowledgement flow;
 and the AI call log with a scheduled redaction sweep.
@@ -877,7 +876,7 @@ Administration also owns the **accounts** (FR-108). The first account becomes th
 administrator; from there an operator can create a user, change roles, suspend or
 re-enable an account, force a password reset, revoke sessions, or delete a user
 outright. Two guards are structural: an administrator cannot remove or suspend
-themselves, and the last active administrator cannot be removed — so an
+themselves, and the last active administrator cannot be removed, so an
 installation cannot be locked out of its own administration. A deleted account's
 sessions are purged with it.
 
@@ -897,7 +896,7 @@ notes are encrypted with a key derived for that account alone, so leftover
 ciphertext is unreadable after deletion.
 
 **Campaign export (FR-463).** One ZIP holding a PDF bundle, a machine-readable
-JSON package and the generated documents — ranked list, company profiles with
+JSON package and the generated documents, ranked list, company profiles with
 five-year financials and signals, dream-job intelligence (gap analysis, stepping
 stones, values warnings), contacts and introduction paths, the full application
 history, and the events marked interesting. Do-not-disclose fields are redacted,
@@ -909,7 +908,7 @@ and refuses to write it if any other job seeker's id is reachable.
 ## 12. Requirement traceability
 
 **156 of 157 requirements (99%) are cited in the implementation**: 103 of 104
-Must, 44 of 44 Should, 9 of 9 Could. The full matrix — requirement to file — is
+Must, 44 of 44 Should, 9 of 9 Could. The full matrix, requirement to file, is
 generated from the source by `scripts/traceability.py --full` (Technical
 Architecture, §11).
 
@@ -921,7 +920,7 @@ The one requirement not cited in code is, by nature:
 
 NFR-103 (a campaign completes its non-browser stages within four hours) and
 NFR-503 (usable on a laptop, tablet-acceptable) were previously listed here as
-uncited; both are now cited — the performance target in the collection code and
+uncited; both are now cited, the performance target in the collection code and
 the responsive layout in the stylesheets that the matrix scans.
 
 ### Known limitations
@@ -963,8 +962,8 @@ Carried forward honestly rather than closed:
   picks it, job alerts are still read from Gmail or an IMAP mailbox only, and it needs an app
   registration the administrator creates (`docs/M365_Mail_Setup.md`). The
   Microsoft 365 **calendar Graph client is implemented but not connectable**
-  because its OAuth exchange is not exposed. Gmail and Google Calendar are
-  wired end to end.
+  because its OAuth exchange is not exposed. Gmail is wired end to end. Google
+  Calendar connects through the API only, with no screen for it yet.
 - **Bulk register and board importers are operator scripts**, run by hand rather
   than on the scheduler, so the company inventory widens when an operator runs
   them.
@@ -984,7 +983,7 @@ Carried forward honestly rather than closed:
 
 | SRS §8 scenario | Status |
 |---|---|
-| Import LinkedIn PDF and CV, resolve conflicts, obtain composite profile and dream job model | **Verified on the real documents** — 18 conflicts surfaced, photo extracted, model confirmed |
+| Import LinkedIn PDF and CV, resolve conflicts, obtain composite profile and dream job model | **Verified on the real documents**, 18 conflicts surfaced, photo extracted, model confirmed |
 | Planted homonym presented for confirmation, never merged once rejected | Implemented; permanent rejection enforced |
 | Directives through structured controls, plan reviewed, source excluded, launch | Implemented |
 | Scope-capped LinkedIn run, duration within ±25%, stops on challenge | Implemented; **not exercised against live LinkedIn** |
@@ -997,7 +996,7 @@ Carried forward honestly rather than closed:
 | Gap analysis with 3 gaps, 2 stepping-stone paths, fit meter | Implemented |
 | Discretion mode excludes employer, group entities and contacts everywhere | Implemented |
 | Watchlist, injected vacancy, notification, digest | Implemented; scheduler autostarts at boot |
-| Interview-invitation reply, calendar check, drafted confirmation, mock interview | Implemented; Google Calendar needs OAuth credentials, Microsoft client not yet connectable |
+| Interview-invitation reply, calendar check, drafted confirmation, mock interview | Implemented; Google Calendar needs OAuth credentials and connects through the API only (no screen yet), Microsoft client not yet connectable |
 | Employer reviews read from the company's own pages and fed to attractiveness | Implemented, advisory only |
 | Event and community radar with travel tolerance and calendar export | Implemented |
 | Administrator creates, suspends, resets and deletes accounts; last admin protected | Implemented and tested |

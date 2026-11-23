@@ -15,6 +15,7 @@ import argparse
 import sys
 import time
 
+from dreamjob.config import get_settings
 from dreamjob.db.connection import query_one
 from dreamjob.db.repositories import campaigns as campaign_repo
 from dreamjob.db.repositories import opportunities as opp_repo
@@ -25,9 +26,13 @@ PAGE = 500
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--email", default="stephane@stepvda.com")
+    parser.add_argument("--email", default=None, help="defaults to DREAMJOB_OWNER_EMAIL")
     parser.add_argument("--campaign", default=None)
     args = parser.parse_args()
+    args.email = args.email or get_settings().owner_email
+    if not args.email:
+        print("No account given: pass --email or set DREAMJOB_OWNER_EMAIL in .env")
+        return 1
 
     seeker = query_one("SELECT id, email FROM job_seeker WHERE email = ?", (args.email,))
     if seeker is None:

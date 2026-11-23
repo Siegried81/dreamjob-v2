@@ -21,7 +21,6 @@ from __future__ import annotations
 from typing import Any
 
 from dreamjob.db.connection import (
-    execute,
     from_json,
     insert_row,
     insert_row_versioned,
@@ -101,16 +100,6 @@ def get_finding(job_seeker_id: str, finding_id: str) -> dict | None:
         query_one(
             "SELECT * FROM enrichment_finding WHERE id = ? AND job_seeker_id = ?",
             (finding_id, job_seeker_id),
-        ),
-        _FINDING_JSON,
-    )
-
-
-def finding_by_url(job_seeker_id: str, url: str) -> dict | None:
-    return _decode(
-        query_one(
-            "SELECT * FROM enrichment_finding WHERE job_seeker_id = ? AND url = ?",
-            (job_seeker_id, url),
         ),
         _FINDING_JSON,
     )
@@ -209,24 +198,9 @@ def usable_findings(job_seeker_id: str) -> list[dict]:
     return [_decode(r, _FINDING_JSON) or {} for r in rows]
 
 
-def delete_findings(job_seeker_id: str, *, keep_rejections: bool = True) -> int:
-    sql = "DELETE FROM enrichment_finding WHERE job_seeker_id = ?"
-    if keep_rejections:
-        sql += " AND rejected_permanently = 0"
-    return execute(sql, (job_seeker_id,))
-
-
 # ---------------------------------------------------------------------------
 # composite_profile (FR-121, FR-125)
 # ---------------------------------------------------------------------------
-
-
-def next_composite_version(job_seeker_id: str) -> int:
-    row = query_one(
-        "SELECT MAX(version) AS v FROM composite_profile WHERE job_seeker_id = ?",
-        (job_seeker_id,),
-    )
-    return int(row["v"] or 0) + 1 if row else 1
 
 
 def insert_composite(job_seeker_id: str, values: dict) -> str:
@@ -282,14 +256,6 @@ def update_composite(job_seeker_id: str, composite_id: str, values: dict) -> dic
 # ---------------------------------------------------------------------------
 # dream_job_model (FR-128)
 # ---------------------------------------------------------------------------
-
-
-def next_dream_version(job_seeker_id: str) -> int:
-    row = query_one(
-        "SELECT MAX(version) AS v FROM dream_job_model WHERE job_seeker_id = ?",
-        (job_seeker_id,),
-    )
-    return int(row["v"] or 0) + 1 if row else 1
 
 
 def insert_dream_model(job_seeker_id: str, values: dict) -> str:

@@ -566,9 +566,12 @@ def _sender_address(backend: MailBackend | None, seeker: dict, notes: list[str])
     settings = get_settings()
     if backend is not None:
         try:
-            return backend.sender_address()
+            address = backend.sender_address()
         except MailBackendError as exc:
             notes.append(f"The mailbox has no sender address: {exc}")
+        else:
+            if address:
+                return address
     fallback = settings.mail_from or seeker.get("email") or "dry-run@dreamjob.local"
     notes.append(f"Composed with {fallback} as the From address for the dry run.")
     return fallback

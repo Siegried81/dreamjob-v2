@@ -113,6 +113,10 @@ def _tag_payload(company: dict, seeker: Seeker) -> dict[str, Any]:
     payload["evidence_in_words"] = evidence_in_words(tag.verdict)
     payload["vacancy_count"] = run_repo.vacancy_count(company["id"])
     payload["attempts"] = trail_repo.attempts_for(company["id"])
+    snapshot = trail_repo.read_signals(company["id"]) or {}
+    payload["free_signals"] = {
+        key: snapshot.get(key) for key in ("hint", "tier", "score", "priority")
+    }
     payload["advisory"] = (
         "This is what the knowledge base has established about who posts these "
         "vacancies. It orders and labels a list; it decides nothing (CR-405). If it "

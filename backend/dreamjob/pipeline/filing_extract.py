@@ -33,11 +33,8 @@ import logging
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime
-from pathlib import Path
 from typing import Any
 
-from dreamjob.config import get_settings
-from dreamjob.db.repositories import financials as repo
 from dreamjob.llm.client import BudgetExhausted, LLMClient, LLMError
 
 log = logging.getLogger(__name__)
@@ -1186,12 +1183,6 @@ async def fx_quote(currency: str, on_date: str, egress: Any = None) -> FxQuote:
     return FxQuote(code, fallback, reference.isoformat(), "fallback_table")
 
 
-async def ecb_rate_to_eur(currency: str, on_date: str, egress: Any = None) -> tuple[float, str]:
-    """The rate and its conversion date alone (DR-103), for callers that need no more."""
-    quote = await fx_quote(currency, on_date, egress=egress)
-    return quote.rate, quote.on_date
-
-
 def eur_rate(row: dict[str, Any]) -> float | None:
     """The rate that converts this row to EUR, or ``None`` when there is none.
 
@@ -1293,20 +1284,6 @@ def to_financial_year_row(
         "filing_document_id": record.filing_document_id,
         "source": source or record.source,
     }
-
-
-def load_filing(document_id: str) -> tuple[bytes, str] | None:
-    """Re-read a stored filing from disk so extractors can be re-run (DR-102)."""
-    row = repo.raw_document(document_id)
-    if not row:
-        return None
-    path = Path(str(row["storage_path"]))
-    if not path.is_absolute():
-        path = get_settings().abs_data_dir / path
-    if not path.exists():
-        log.warning("Stored filing %s is missing at %s", document_id, path)
-        return None
-    return path.read_bytes(), str(row["content_type"] or "")
 
 
 def extract_filing(

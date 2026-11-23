@@ -9,12 +9,12 @@ Run:  python build_video.py
 
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 from pathlib import Path
 
 import edge_tts
-import asyncio
 
 ROOT = Path(__file__).resolve().parent
 RENDER = ROOT / "render"

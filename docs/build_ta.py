@@ -20,15 +20,14 @@ import re
 import sys
 from pathlib import Path
 
-from PIL import Image
-
 from docx import Document
 from docx.enum.section import WD_SECTION
 from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK, WD_TAB_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Inches, Pt, RGBColor, Emu
+from docx.shared import Inches, Pt, RGBColor
+from PIL import Image
 
 # --------------------------------------------------------------------------
 # Paths
@@ -1101,6 +1100,7 @@ def main():
 def verify(builder):
     """Re-open the saved file and confirm what actually landed in it."""
     import zipfile
+
     from docx import Document as D
 
     d = D(str(OUTPUT))

@@ -29,8 +29,18 @@ from dreamjob.security import auth_service as auth  # noqa: E402
 from dreamjob.security import crypto  # noqa: E402
 from dreamjob.security.audit import record_audit  # noqa: E402
 
-OWNER_EMAIL = "stephane@stepvda.com"
-OWNER_NAME = "Stephane van der Aa"
+
+def owner_identity(email: str | None, name: str | None) -> tuple[str, str]:
+    """The administrator to create: the flags, else ``DREAMJOB_OWNER_*`` from .env.
+
+    No address is built in.  Without one the script stops and says which setting
+    to fill, rather than creating an account nobody asked for.
+    """
+    settings = get_settings()
+    email = (email or settings.owner_email).strip()
+    if not email:
+        raise SystemExit("No owner address: pass --email or set DREAMJOB_OWNER_EMAIL in .env")
+    return email, (name or settings.owner_name).strip() or email.split("@")[0]
 
 
 def generate_password(length: int = 20) -> str:
@@ -46,8 +56,8 @@ def generate_password(length: int = 20) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Bootstrap a Dream Job installation")
-    parser.add_argument("--email", default=OWNER_EMAIL)
-    parser.add_argument("--name", default=OWNER_NAME)
+    parser.add_argument("--email", default=None, help="defaults to DREAMJOB_OWNER_EMAIL")
+    parser.add_argument("--name", default=None, help="defaults to DREAMJOB_OWNER_NAME")
     parser.add_argument("--password", default=None, help="defaults to $DREAMJOB_BOOTSTRAP_PASSWORD")
     parser.add_argument("--reset-password", action="store_true")
     parser.add_argument(
@@ -56,6 +66,7 @@ def main() -> int:
         help="do not demote other administrators (default: the owner is the sole admin)",
     )
     args = parser.parse_args()
+    args.email, args.name = owner_identity(args.email, args.name)
 
     settings = get_settings()
     settings.ensure_dirs()

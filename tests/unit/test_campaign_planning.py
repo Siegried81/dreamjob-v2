@@ -1587,3 +1587,80 @@ def test_two_items_differing_only_in_page_are_still_one_unit_of_work():
         assert planning._plan_key("board.actiris", {**base, volatile: 7}) == key
     # Geography is not one of them.
     assert planning._plan_key("board.actiris", {**base, "countries": ["BE"]}) != key
+
+
+def test_a_finished_collection_gives_country_less_companies_their_postings_country(
+    db, monkeypatch
+):
+    """The planner skips companies whose country is known and outside the search.
+
+    ATS discovery writes companies from a board with no country, so every one of
+    them reads as "unknown" and is planned for any search.  The run now ends
+    each time by giving a country-less company the country most of its postings
+    are in, and leaves a country that is already set alone.
+    """
+    seeker = _seeker()
+    campaign_id = _campaign(seeker)
+    def company(name: str, country: str | None) -> str:
+        return insert_row(
+            "company",
+            {"name": name, "normalised_name": name.lower(), "country": country,
+             "collected_at": utcnow()},
+        )
+
+    def vacancy(company_id: str, country: str, n: int) -> None:
+        for i in range(n):
+            insert_row(
+                "vacancy",
+                {"company_id": company_id, "title": f"Role {country}{i}", "country": country,
+                 "collected_at": utcnow()},
+            )
+
+    unknown = company("Mostly Belgian NV", None)
+    vacancy(unknown, "BE", 3)
+    vacancy(unknown, "NL", 1)
+    already_known = company("Registered in France SA", "FR")
+    vacancy(already_known, "BE", 2)
+
+    monkeypatch.setattr(collection, "_synthesise", lambda campaign: {"error": "stop here"})
+    ctx = JobContext(
+        job_id=runner.create(collection.JOB_KIND, campaign_id=campaign_id, job_seeker_id=seeker),
+        campaign_id=campaign_id, job_seeker_id=seeker,
+    )
+    campaign = campaign_repo.get_campaign(campaign_id, seeker)
+    asyncio.run(collection._rank_collected(ctx, campaign, "completed"))
+
+    countries = {r["id"]: r["country"] for r in query_all("SELECT id, country FROM company")}
+    assert countries[unknown] == "BE"
+    assert countries[already_known] == "FR"
+
+
+def test_a_new_campaign_takes_the_default_persona_and_refuses_a_foreign_one(db):
+    """FR-442: the first persona is the default, and a persona is private."""
+    from dreamjob.db.repositories import profiles as profiles_repo
+
+    me, other = _seeker(), insert_row(
+        "job_seeker",
+        {"email": "other@example.com", "display_name": "Other", "created_at": utcnow(),
+         "updated_at": utcnow()},
+    )
+    default = profiles_repo.create_persona(me, {"name": "Data lead"})
+    foreign = profiles_repo.create_persona(other, {"name": "Someone else's"})
+    directive_id = insert_row(
+        "directive_set",
+        {"job_seeker_id": me, "name": "d", "job_content": {}, "location": {},
+         "created_at": utcnow()},
+    )
+    profile_id = insert_row(
+        "profile_version",
+        {"job_seeker_id": me, "version": 1, "sections": {}, "created_at": utcnow()},
+    )
+    client = _client(me)
+    body = {"name": "n", "directive_set_id": directive_id, "profile_version_id": profile_id}
+
+    created = client.post("/api/campaigns", json=body)
+    assert created.status_code == 201, created.text
+    assert created.json()["persona_id"] == default["id"]
+
+    refused = client.post("/api/campaigns", json={**body, "persona_id": foreign["id"]})
+    assert refused.status_code == 404

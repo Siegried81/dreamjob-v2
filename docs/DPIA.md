@@ -1,11 +1,11 @@
-# Dream Job — Data Protection Impact Assessment
+# Dream Job: Data Protection Impact Assessment
 
 | | |
 |---|---|
 | Document | Data Protection Impact Assessment (NFR-304) |
-| Version | 1.0 — **draft for legal review** |
+| Version | 1.0, **draft for legal review** |
 | Date | 9 September 2026 |
-| Author | Stephane van der Aa |
+| Author | Siegried Camus and Stephane van der Aa |
 | Status | Must be reviewed and signed off **before production use** |
 | Legal basis for the assessment | GDPR Article 35 |
 
@@ -25,11 +25,11 @@ processing. Dream Job meets the threshold on three counts:
 
 1. **Systematic profiling** of the job seeker, combining supplied documents with
    web-sourced material into an evaluative composite.
-2. **Processing personal data of third parties** — hiring contacts — who have no
+2. **Processing personal data of third parties**, hiring contacts, who have no
    relationship with the controller and have not been asked.
 3. **AI in an employment context**, which Annex III of the AI Act treats as
    high-risk for the deploying employer. Dream Job acts for the *candidate*, not
-   the employer, so it falls outside that classification — but the reasoning
+   the employer, so it falls outside that classification, but the reasoning
    should be documented rather than assumed.
 
 ---
@@ -45,14 +45,14 @@ processing. Dream Job meets the threshold on three counts:
 
 ### Categories of data subject
 
-**The job seeker** — the primary user, who supplies their own data.
+**The job seeker**: the primary user, who supplies their own data.
 
-**Hiring contacts** — named individuals at target companies, whose professional
+**Hiring contacts**: named individuals at target companies, whose professional
 contact details are collected so that an application can reach a person rather
 than a mailbox. *They did not ask to be in this system.* Their interests are the
 central concern of this assessment.
 
-**Third parties incidentally present** — people named on a company's team page,
+**Third parties incidentally present**: people named on a company's team page,
 in press coverage, or in a filing. Collected as part of a company profile, not
 as individuals of interest.
 
@@ -68,7 +68,7 @@ as individuals of interest.
 seek them, and filters them out of enrichment findings before storage (FR-127).
 
 > **A design correction worth recording.** The first implementation of that
-> filter matched bare keywords — *health, medical, political, ethnic, race* —
+> filter matched bare keywords (*health, medical, political, ethnic, race*)
 > and so deleted "healthcare data company", "medical devices", "Political
 > Science" and "human rights platform" from ordinary professional histories.
 > It protected nobody and damaged exactly the data subjects whose careers most
@@ -81,12 +81,12 @@ seek them, and filters them out of enrichment findings before storage (FR-127).
 ## 3. Necessity and proportionality
 
 **Is the processing necessary for the purpose?** For the job seeker's own data,
-plainly yes — it is their application. For hiring contacts, the question is
+plainly yes: it is their application. For hiring contacts, the question is
 whether a *named person's* professional address is necessary when a generic
 mailbox exists. The system's position: a named, relevant contact is what makes
 an application reach a human, and the alternative (spraying `info@`) is worse for
-everyone including the recipient. The contact hierarchy — hiring manager, then
-talent acquisition, then generic mailbox (FR-301) — reflects that.
+everyone including the recipient. The contact hierarchy, hiring manager, then
+talent acquisition, then generic mailbox (FR-301), reflects that.
 
 **Is it proportionate?** The controls that make it so:
 
@@ -95,9 +95,9 @@ talent acquisition, then generic mailbox (FR-301) — reflects that.
 - **Collection is bounded by directives**, not open-ended. The system
   deliberately "collects what the directives justify rather than downloading the
   world".
-- **Volume is capped** per campaign — pages, companies, people, duration — and
+- **Volume is capped** per campaign: pages, companies, people, duration, and
   an operator's cap cannot be raised by a campaign.
-- **Sending is capped** — a daily maximum, a minimum interval, and send windows
+- **Sending is capped**: a daily maximum, a minimum interval, and send windows
   in the recipient's own time zone.
 
 ---
@@ -112,13 +112,13 @@ talent acquisition, then generic mailbox (FR-301) — reflects that.
 | Hiring contacts' professional data | **Legitimate interest** (Art. 6(1)(f)) | Balancing test below |
 | Browser-automated collection | Legitimate interest, narrowed | Additional retention limits, see §6 |
 
-### Legitimate-interest balancing test — hiring contacts
+### Legitimate-interest balancing test: hiring contacts
 
 **The interest.** A job seeker approaching a relevant person at an employer about
 work. This is a recognised and ordinary purpose; it is what a job application is.
 
-**Necessity.** The alternative — applying only through portals and generic
-mailboxes — measurably reduces the chance of reaching a decision-maker, and the
+**Necessity.** The alternative, applying only through portals and generic
+mailboxes, measurably reduces the chance of reaching a decision-maker, and the
 whole premise of the product is reaching unadvertised opportunity, which has no
 portal.
 
@@ -136,7 +136,7 @@ spam. The system addresses all three:
   legal one.
 - **Every introduction email carries an objection sentence** (NFR-302).
 - **An objection is permanent and installation-wide**, enforced in the query the
-  generator uses rather than only in the interface. Not a preference — a block.
+  generator uses rather than only in the interface. Not a preference, a block.
 - **Volume controls** as in §3.
 
 **Conclusion.** Legitimate interest is available for B2B introduction emails to
@@ -151,15 +151,15 @@ reassessed.
 
 | Right | How it is served |
 |---|---|
-| Information (Art. 13–14) | The job seeker is informed in-product before any transfer. **Hiring contacts are informed at the point of first contact** — the email itself is the Art. 14 notice, and it identifies the sender and offers objection |
+| Information (Art. 13-14) | The job seeker is informed in-product before any transfer. **Hiring contacts are informed at the point of first contact**, the email itself is the Art. 14 notice, and it identifies the sender and offers objection |
 | Access / portability | `GET /api/auth/me/export` returns every private row as JSON |
 | Rectification | Every profile field is editable; composite-profile statements are individually correctable |
-| Erasure | `DELETE /api/auth/me` removes every private row **and every file on disk**. The table list is derived from the live schema, so a table added by a later migration cannot be missed. Shared market data — which carries no link to any job seeker — survives |
+| Erasure | `DELETE /api/auth/me` removes every private row **and every file on disk**. The table list is derived from the live schema, so a table added by a later migration cannot be missed. Shared market data, which carries no link to any job seeker, survives |
 | Objection | Permanent block per address, honoured everywhere |
 | Not to be subject to automated decisions (Art. 22) | **No automated decision produces a legal or similarly significant effect.** Scoring is advisory; a human approves every application (NFR-305) |
 
 **Gap.** There is no self-service route for a *hiring contact* to exercise access
-or erasure — they must contact the controller, who then acts through the
+or erasure: they must contact the controller, who then acts through the
 objection mechanism and manual deletion. For a single-tenant installation this is
 proportionate. For a hosted service it is not, and would need a published contact
 point and a documented procedure.
@@ -176,7 +176,7 @@ point and a documented procedure.
 | **Contacts (browser automation)** | **Campaign duration + grace period**, then deleted | Automatic sweep; never shared between job seekers (NFR-303) |
 | Raw fetched documents | Cache TTL, then re-fetched | Content-hash store |
 | AI prompts and responses | Retention period, then redacted in place | Scheduled sweep (FR-364) |
-| Audit trail | Retained — it is the accountability record | Append-only |
+| Audit trail | Retained, it is the accountability record | Append-only |
 
 ---
 
@@ -193,8 +193,8 @@ Controls:
   prompt is built**, not filtered afterwards.
 - **Every call is logged** with its task, model, prompt and response, so what was
   transferred is auditable rather than assumed.
-- **A local model can serve the privacy-sensitive steps** — composite profile,
-  tailored CV, motivation document — with no code change, removing the transfer
+- **A local model can serve the privacy-sensitive steps** (composite profile,
+  tailored CV, motivation document) with no code change, removing the transfer
   entirely for the most sensitive processing (NFR-306).
 
 > **Open question for legal review.** Consent under Art. 49(1)(a) is a derogation
@@ -244,11 +244,11 @@ Summarised against Article 32:
 | 2 | Generated CV asserts something untrue | Medium | High | Grounding on profile facts only; deterministic date/employer/title checks; mandatory human preview | **Low** |
 | 3 | Contact data leaks between job seekers | Low | High | Query-level isolation; browser-collected contacts never shared; export tested to contain no other job seeker's data | **Low** |
 | 4 | Recipient objection not honoured | Low | High | Block enforced in the generator's own query, not the interface | **Low** |
-| 5 | Volume turns legitimate interest into spam | Medium | Medium | Daily caps, pacing, recipient-timezone send windows, validated addresses only | **Low–Medium** |
-| 6 | Profile data transferred outside the EU beyond what consent covers | Medium | Medium | Pre-transfer redaction, recorded consent, full call log, local-model option | **Medium** — see §7 |
-| 7 | Job seeker's LinkedIn account restricted | Medium | High *(to the job seeker)* | Tight scope caps, human pacing, stop-on-challenge, explicit warning and recorded acknowledgement | **Medium** — accepted knowingly by the user |
-| 8 | Prompt injection from a scraped page redirects the model | Medium | Medium | Content isolation, instruction/data separation, output validation, flagged instructions surfaced | **Low–Medium** |
-| 9 | Administrator over-reach in a shared installation | Low | High | *Unmitigated* — see §8.3 | **High for multi-tenant; N/A single-tenant** |
+| 5 | Volume turns legitimate interest into spam | Medium | Medium | Daily caps, pacing, recipient-timezone send windows, validated addresses only | **Low-Medium** |
+| 6 | Profile data transferred outside the EU beyond what consent covers | Medium | Medium | Pre-transfer redaction, recorded consent, full call log, local-model option | **Medium**, see §7 |
+| 7 | Job seeker's LinkedIn account restricted | Medium | High *(to the job seeker)* | Tight scope caps, human pacing, stop-on-challenge, explicit warning and recorded acknowledgement | **Medium**, accepted knowingly by the user |
+| 8 | Prompt injection from a scraped page redirects the model | Medium | Medium | Content isolation, instruction/data separation, output validation, flagged instructions surfaced | **Low-Medium** |
+| 9 | Administrator over-reach in a shared installation | Low | High | *Unmitigated*, see §8.3 | **High for multi-tenant; N/A single-tenant** |
 
 **Article 36 prior consultation** is not required if the residual risks above are
 accepted as low. Risk 9 must be closed before a multi-tenant deployment, at which
@@ -260,7 +260,7 @@ point the assessment should be re-run rather than amended.
 
 The system as built is **suitable for single-tenant production use** subject to:
 
-1. **Legal review of §7** — the transfer basis. Recommended posture: route the
+1. **Legal review of §7**: the transfer basis. Recommended posture: route the
    privacy-sensitive steps to a local model.
 2. **Disk-level encryption** on the host, until the database is encrypted at rest.
 3. **MFA enrolled** on any account holding real contact data.
@@ -279,7 +279,7 @@ multi-tenant; a new category of personal data; or annually.
 
 | | Name | Date | Signature |
 |---|---|---|---|
-| Prepared by | Stephane van der Aa | 9 September 2026 | |
+| Prepared by | Siegried Camus and Stephane van der Aa | 9 September 2026 | |
 | Reviewed by *(data protection)* | | | |
 | Approved for production | | | |
 

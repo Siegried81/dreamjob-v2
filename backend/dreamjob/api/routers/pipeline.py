@@ -21,9 +21,11 @@ import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from dreamjob.api.deps import CurrentSeeker, current_seeker
+from dreamjob.api.routers.mail import callback_page
 from dreamjob.config import get_settings
 from dreamjob.db.repositories import pipeline_cards as repo
 from dreamjob.llm.client import LLMClient
@@ -131,7 +133,6 @@ class NegotiationIn(BaseModel):
 
 class CalendarConnectIn(BaseModel):
     provider: str = "google"
-    redirect_uri: str | None = None
     include_drive: bool = False
 
 
@@ -382,20 +383,39 @@ def calendar_accounts(seeker: Seeker) -> dict:
 @router.post("/calendar/authorize")
 def calendar_authorize(payload: CalendarConnectIn, seeker: Seeker) -> dict:
     """The consent URL for connecting a calendar (FR-423)."""
-    from dreamjob.security.crypto import new_session_token  # noqa: PLC0415
-
-    state, _ = new_session_token()
     try:
-        url = calendar_sync.authorization_url(
-            payload.provider,
-            state=state,
-            redirect_uri=payload.redirect_uri
-            or "http://127.0.0.1:8000/api/pipeline/calendar/callback",
-            drive=payload.include_drive,
+        return calendar_sync.begin_authorization(
+            seeker.id, payload.provider, drive=payload.include_drive
         )
     except calendar_sync.CalendarUnavailable as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
-    return {"authorization_url": url, "state": state}
+
+
+@router.get("/calendar/callback", include_in_schema=False)
+async def calendar_callback(
+    code: str | None = None, state: str | None = None, error: str | None = None
+) -> HTMLResponse:
+    """The redirect target Google sends the browser to.
+
+    No session dependency: the browser arrives from Google, and the single-use
+    ``state`` row is what binds the redirect to the job seeker who started it.
+    """
+    if error:
+        return callback_page(f"Google reported: {error}", ok=False, subject="Calendar")
+    if not code or not state:
+        return callback_page(
+            "The callback arrived without a code or state.", ok=False, subject="Calendar"
+        )
+    try:
+        account = await calendar_sync.complete_authorization(state, code)
+    except calendar_sync.CalendarUnavailable as exc:
+        return callback_page(str(exc), ok=False, subject="Calendar")
+    record_audit(
+        "calendar.connected", "calendar_account", account["id"], seeker_id=account["job_seeker_id"]
+    )
+    return callback_page(
+        "Your calendar is connected. You can close this tab.", ok=True, subject="Calendar"
+    )
 
 
 @router.delete("/calendar/{account_id}")

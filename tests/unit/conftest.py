@@ -98,6 +98,54 @@ def _the_model_is_out_of_reach() -> Iterator[None]:
 
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _the_internet_is_out_of_reach() -> Iterator[None]:
+    """No unit test may reach a real host, and a leak must fail fast.
+
+    A campaign run ends in passes that look up the employer of every record
+    collected: register fetches, domain probes, an MX query, an SMTP probe.  A
+    test that ran one without stubbing the network did not fail, it waited on
+    the real internet at the per-domain pace, a minute for one test and tens of
+    minutes for the suite.  Name resolution and the synchronous socket calls
+    are refused for every host but loopback, so a missed stub becomes an
+    ordinary failed lookup that the code already handles, in microseconds.
+    Tests that need an answer stub ``EgressClient.fetch`` or use
+    ``httpx.MockTransport``; neither goes through here.
+    """
+    import socket
+
+    loopback = {"localhost", "127.0.0.1", "::1", "testserver", ""}
+    real_getaddrinfo = socket.getaddrinfo
+    real_connect = socket.socket.connect
+    real_sendto = socket.socket.sendto
+
+    def _is_local(host: object) -> bool:
+        return str(host) in loopback or str(host).startswith("127.")
+
+    def getaddrinfo(host, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if not _is_local(host):
+            raise socket.gaierror(socket.EAI_NONAME, f"network is closed in tests: {host}")
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    def connect(self, address):  # type: ignore[no-untyped-def]
+        if isinstance(address, tuple) and not _is_local(address[0]):
+            raise OSError(f"network is closed in tests: {address[0]}")
+        return real_connect(self, address)
+
+    def sendto(self, data, *args):  # type: ignore[no-untyped-def]
+        address = args[-1]
+        if isinstance(address, tuple) and not _is_local(address[0]):
+            raise OSError(f"network is closed in tests: {address[0]}")
+        return real_sendto(self, data, *args)
+
+    patch = pytest.MonkeyPatch()
+    patch.setattr(socket, "getaddrinfo", getaddrinfo)
+    patch.setattr(socket.socket, "connect", connect)
+    patch.setattr(socket.socket, "sendto", sendto)
+    yield
+    patch.undo()
+
+
 @pytest.fixture(autouse=True)
 def _fresh_connection_cache() -> Iterator[None]:
     """Never hand a test a connection another test opened.

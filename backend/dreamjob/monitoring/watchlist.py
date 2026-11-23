@@ -124,10 +124,6 @@ class WatchReport:
             "checked_at": self.checked_at,
         }
 
-    @property
-    def anything_new(self) -> bool:
-        return bool(self.new_vacancies or self.new_signals or self.new_filings)
-
 
 # ---------------------------------------------------------------------------
 # Managing the list

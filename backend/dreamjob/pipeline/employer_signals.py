@@ -1324,16 +1324,24 @@ def signal_snapshot(company: Any) -> dict[str, Any]:
 
 
 def work_queue(
-    *, min_postings: int = 1, limit: int = 200, lexicon: Lexicon | None = None
+    *,
+    company_ids: Iterable[str] | None = None,
+    min_postings: int = 1,
+    limit: int = 200,
+    lexicon: Lexicon | None = None,
 ) -> list[Signals]:
     """Employers ordered by how much a verdict on them is worth.
 
     Suspicion first, then blast radius: an agency with 56 postings costs the job
     seeker 56 wrong company profiles, one with three costs three.  This is the
     only thing the free signals decide on their own.
+
+    ``company_ids`` orders a queue somebody else already chose (the resolver's
+    pass) instead of reading the employers with the most postings.
     """
-    scored = [
-        score_employer(row["id"], lexicon=lexicon)
-        for row in repo.employers_with_postings(min_postings=min_postings, limit=limit)
-    ]
+    if company_ids is None:
+        ids = [row["id"] for row in repo.employers_with_postings(min_postings=min_postings, limit=limit)]
+    else:
+        ids = list(dict.fromkeys(company_ids))
+    scored = [score_employer(company_id, lexicon=lexicon) for company_id in ids]
     return sorted(scored, key=lambda s: s.sort_key)

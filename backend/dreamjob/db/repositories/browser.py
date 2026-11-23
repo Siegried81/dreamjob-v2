@@ -104,11 +104,6 @@ def store_screenshot(url: str, png: bytes) -> str | None:
         return None
 
 
-def capture_path(raw_document_id: str) -> str | None:
-    row = query_one("SELECT storage_path FROM raw_document WHERE id = ?", (raw_document_id,))
-    return row["storage_path"] if row else None
-
-
 # ---------------------------------------------------------------------------
 # Contacts collected through the browser (NFR-303, NFR-302)
 # ---------------------------------------------------------------------------

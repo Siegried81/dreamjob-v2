@@ -414,6 +414,10 @@ class RungContext:
     #: False for a dry run: the ladder answers and writes nothing, the rung-0b
     #: snapshot included.  A "what would this say" must not leave a trail.
     store: bool = True
+    #: What each provider rung returned, before it was reduced to a
+    #: :class:`RungOutcome`.  The registry's own result carries the activity
+    #: codes and the two candidate rows, which the ladder needs after the walk.
+    raw: dict[str, Any] = field(default_factory=dict)
 
     @property
     def company_id(self) -> str:
@@ -686,6 +690,69 @@ async def signals_rung(ctx: RungContext) -> RungOutcome:
 HINTS = frozenset({"suspected_agency", "suspected_direct", "none"})
 
 
+def _merge_registry_signals(ctx: RungContext) -> list[dict[str, Any]]:
+    """Add the register's signals (R1, D6) to the free ones and rescore.
+
+    The detector's band was computed from the adverts alone, before the register
+    was read.  ``Signals.with_signals`` is the seam for recomputing it over the
+    union, and this is where the two passes meet.  The recomputed band replaces
+    the stored rung-0b snapshot, so the queue priority and the "suspected" hint
+    shown beside a ``cannot_tell`` reflect the register as well.  It still
+    decides nothing: only the registry rung's own verdict can do that.
+
+    Returns the register signals as evidence items, for the verdict's trail.
+    """
+    raw = ctx.raw.get(RUNG_REGISTRY)
+    if raw is None or not hasattr(raw, "staffing_codes"):
+        return []
+    try:
+        from dreamjob.pipeline.employer_registry_rung import registry_signals  # noqa: PLC0415
+        from dreamjob.pipeline.employer_signals import score_employer  # noqa: PLC0415
+    except ImportError:  # pragma: no cover - both ship in the same release
+        return []
+    extra = registry_signals(raw)
+    if not extra or not ctx.company_id:
+        return []
+    merged = score_employer(ctx.company_id).with_signals(extra)
+    snapshot = {
+        "vacancy_count": ctx.vacancy_count,
+        "tier": merged.band if merged.band in TIERS else None,
+        "score": merged.score,
+        "signals": merged.evidence_record(),
+    }
+    snapshot["hint"] = _hint_for(snapshot)
+    snapshot["priority"] = _priority(snapshot, ctx.vacancy_count)
+    ctx.signals.update(snapshot)
+    if ctx.store:
+        repo.record_signals(ctx.company_id, snapshot)
+    return [
+        {**s.as_dict(), "type": "signal"} for s in extra if s.fired
+    ]
+
+
+def _attach_ambiguity(verdict: Verdict, ctx: RungContext) -> None:
+    """Show "which one is it?" with both register rows when nothing better exists.
+
+    Two registered companies share the name and the register cannot say which
+    posted these vacancies.  That is a more useful stored answer than a bare
+    ``cannot_tell``: it carries the candidate rows, so a person can choose.
+    """
+    raw = ctx.raw.get(RUNG_REGISTRY)
+    match = getattr(raw, "match", None)
+    if match is None or getattr(raw, "decision", "") != "ambiguous":
+        return
+    try:
+        from dreamjob.pipeline.employer_registry_rung import ambiguity_verdict  # noqa: PLC0415
+    except ImportError:  # pragma: no cover - both ship in the same release
+        return
+    answer = ambiguity_verdict(match, source_url=str(getattr(raw, "source_url", "") or ""))
+    verdict.reason = REASON_REGISTRY_AMBIGUOUS
+    verdict.rung = RUNG_REGISTRY
+    verdict.method = METHOD_REGISTRY
+    verdict.identity_evidence = answer.identity_evidence
+    verdict.summary = answer.summary
+
+
 def _hint_for(snapshot: dict[str, Any]) -> str:
     """The suspicion the free signals support, never more than that."""
     tier = str(snapshot.get("tier") or "")
@@ -735,7 +802,9 @@ def _provider_rung(name: str) -> Callable[[RungContext], Any]:
                 OUTCOME_UNAVAILABLE,
                 note=f"the {name} rung is not installed in this build",
             )
-        return _coerce(await _call(provider, ctx), rung=name)
+        result = await _call(provider, ctx)
+        ctx.raw[name] = result
+        return _coerce(result, rung=name)
 
     return run
 
@@ -865,6 +934,8 @@ async def resolve_employer_kind(
             if verdict.stops_the_ladder:
                 break
 
+    carried.extend(await asyncio.to_thread(_merge_registry_signals, ctx))
+
     if decided is not None:
         verdict = _certify(decided)
     elif not ran_a_rung:
@@ -883,6 +954,7 @@ async def resolve_employer_kind(
             last_reason or REASON_UNREACHABLE,
             rung=last_reason_rung if last_reason else _last_rung(resolution),
         )
+        _attach_ambiguity(verdict, ctx)
 
     verdict.anomalies = [*dict.fromkeys([*verdict.anomalies, *anomalies])]
     verdict.evidence = _evidence_for(verdict, carried, resolution.attempts)
@@ -1503,6 +1575,16 @@ def _batches(rows: list[Any], size: int) -> Iterator[list[Any]]:
         yield rows[start : start + size]
 
 
+def _suspicion_first(company_ids: list[str]) -> list[str]:
+    """The same companies, ordered by the detector: strongest suspicion first."""
+    try:
+        from dreamjob.pipeline.employer_signals import work_queue  # noqa: PLC0415
+    except ImportError:  # pragma: no cover - the detector ships in the same release
+        return company_ids
+    ordered = [str(s.company_id) for s in work_queue(company_ids=company_ids)]
+    return ordered if len(ordered) == len(company_ids) else company_ids
+
+
 async def resolve_many(
     limit: int = DEFAULT_LIMIT,
     *,
@@ -1518,9 +1600,10 @@ async def resolve_many(
 ) -> EmployerResolutionReport:
     """Resolve up to ``limit`` employers, the ones that matter most first (FR-341).
 
-    The order is vacancy count: 210 of the corpus's agency vacancies sit at 34
-    reachable agencies, so a pass that stops early has still covered the rows a
-    wrong answer would have damaged most.  ``company_ids`` overrides the queue,
+    The queue is chosen by vacancy count (210 of the corpus's agency vacancies
+    sit at 34 reachable agencies) and then walked suspicion first, vacancy count
+    second, as :func:`employer_signals.work_queue` orders it, so a pass that stops
+    early has covered the suspected agencies before the rest.  ``company_ids`` overrides the queue,
     which is how a resumed job continues exactly where it stopped rather than
     re-querying and getting a different list (NFR-401).
 
@@ -1534,6 +1617,7 @@ async def resolve_many(
             repo.companies_needing_verdict, limit, country=country, include_resolved=refresh
         )
         company_ids = [str(row["company_id"]) for row in queue]
+        company_ids = await asyncio.to_thread(_suspicion_first, company_ids[:limit] if limit else company_ids)
     company_ids = company_ids[:limit] if limit else company_ids
     report.requested = len(company_ids)
     if not company_ids:

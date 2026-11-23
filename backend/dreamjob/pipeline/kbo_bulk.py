@@ -47,7 +47,7 @@ LEGAL_ID_TYPE_BY_SOURCE: dict[str, str] = {
     "companies_house_bulk": "companies_house",
 }
 
-#: Enterprise status codes in the register.  0 is active; the rest are stopped
+#: The register's status code for an active enterprise.  Anything else is stopped
 #: or being wound up, and a stopped company is not a place anyone will be hired.
 ACTIVE_STATUS = "AC"
 
@@ -221,7 +221,8 @@ def coverage() -> dict[str, Any]:
     """What the staged universe holds, for the operator and the planner (FR-361)."""
     total = query_one("SELECT COUNT(*) AS n FROM company_seed") or {"n": 0}
     active = query_one(
-        "SELECT COUNT(*) AS n FROM company_seed WHERE status = 'AC' OR status IS NULL"
+        "SELECT COUNT(*) AS n FROM company_seed WHERE status = ? OR status IS NULL",
+        (ACTIVE_STATUS,),
     ) or {"n": 0}
     materialised = query_one(
         "SELECT COUNT(*) AS n FROM company_seed WHERE materialised_company_id IS NOT NULL"
@@ -273,7 +274,8 @@ def seeds_in_scope(
     if not include_stopped:
         # The register writes AC for active; a null status is a very old extract
         # that did not carry one, and is kept rather than discarded.
-        sql += " AND (status = 'AC' OR status IS NULL OR status = '')"
+        sql += " AND (status = ? OR status IS NULL OR status = '')"
+        params.append(ACTIVE_STATUS)
     if not include_sole_traders:
         # A sole trader's register row carries a natural person's name, and the
         # knowledge base is shared with every other job seeker (NFR-201, FR-344).

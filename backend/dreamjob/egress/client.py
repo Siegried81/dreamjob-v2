@@ -413,7 +413,7 @@ class EgressClient:
             event_hooks={"request": [self._guard_request]},
             transport=self._transport,
             headers={
-                "User-Agent": self.settings.user_agent,
+                "User-Agent": self.settings.user_agent_header,
                 "Accept-Language": "en,nl;q=0.8,fr;q=0.7",
             },
         )
@@ -562,11 +562,6 @@ class EgressClient:
             return False
         return rp.can_fetch(self.settings.user_agent, url)
 
-    # -- cache (FR-182) -----------------------------------------------------
-    @staticmethod
-    def _url_hash(url: str) -> str:
-        """The cache key: a hash of the *normalised* URL, never of the spelling."""
-        return hashlib.sha256(normalise_url(url).encode()).hexdigest()
 
     @classmethod
     def _cache_key(

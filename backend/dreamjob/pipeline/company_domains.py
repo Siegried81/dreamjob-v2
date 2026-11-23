@@ -1193,6 +1193,3 @@ async def resolve_domains(
     return report
 
 
-def run_resolve_domains(limit: int = 1000, **kwargs: Any) -> dict[str, Any]:
-    """Synchronous entry point, for scripts and the job runner."""
-    return asyncio.run(resolve_domains(limit, **kwargs)).as_dict()

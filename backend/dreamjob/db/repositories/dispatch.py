@@ -39,6 +39,7 @@ from dreamjob.db.connection import (
     utcnow,
     write_tx,
 )
+from dreamjob.db.repositories.apply import set_selection_status_for_package
 from dreamjob.db.repositories.pipeline_cards import invalidate_active_seeker_cache
 
 #: Columns a caller may set on a dispatch.  Anything else is dropped rather
@@ -257,6 +258,13 @@ def create_oauth_state(
     scopes: str,
     expires_at: str,
 ) -> None:
+    """Store one handshake state, first dropping those whose window has closed.
+
+    A consent screen the user walks away from never comes back to consume its
+    row, so each new handshake clears the expired ones rather than letting their
+    PKCE verifiers pile up.
+    """
+    purge_expired_oauth_states()
     # ``state`` is the primary key, so this table has no ``id`` column of its own.
     upsert_row(
         "mail_oauth_state",
@@ -371,17 +379,6 @@ def follow_up_for(parent_dispatch_id: str) -> dict | None:
             "SELECT * FROM dispatch WHERE parent_dispatch_id = ? AND kind = 'follow_up' "
             "AND delivery_status <> 'failed' ORDER BY created_at DESC LIMIT 1",
             (parent_dispatch_id,),
-        ),
-        _DISPATCH_JSON_COLUMNS,
-    )
-
-
-def dispatch_by_message_id(job_seeker_id: str, message_id: str) -> dict | None:
-    """Primary reply match: the Message-ID we generated came back in References."""
-    return _decode(
-        query_one(
-            "SELECT * FROM dispatch WHERE job_seeker_id = ? AND message_id = ?",
-            (job_seeker_id, message_id),
         ),
         _DISPATCH_JSON_COLUMNS,
     )
@@ -634,6 +631,7 @@ def mark_package_sent(package_id: str, job_seeker_id: str) -> None:
         "WHERE id = ? AND job_seeker_id = ?",
         (utcnow(), package_id, job_seeker_id),
     )
+    set_selection_status_for_package(job_seeker_id, package_id, "sent")
 
 
 def mark_opportunity_applied(opportunity_id: str, job_seeker_id: str) -> None:
@@ -645,15 +643,6 @@ def mark_opportunity_applied(opportunity_id: str, job_seeker_id: str) -> None:
     )
     if changed:
         invalidate_active_seeker_cache()
-
-
-def contact_email_state(email: str) -> dict | None:
-    """FR-304 / NFR-302 verdict for a bare address, whichever contact holds it."""
-    return query_one(
-        "SELECT id, email, email_validation, objected FROM contact WHERE lower(email) = ? "
-        "ORDER BY objected DESC LIMIT 1",
-        ((email or "").strip().lower(),),
-    )
 
 
 # ---------------------------------------------------------------------------

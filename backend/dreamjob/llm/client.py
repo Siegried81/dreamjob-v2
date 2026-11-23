@@ -127,9 +127,18 @@ def _response_cache_put(
 
 
 def clear_response_cache() -> None:
-    """Drop the in-process response cache (used by tests and the admin screen)."""
+    """Drop the in-process response cache (tests use it to start from a clean slate)."""
     with _RESPONSE_CACHE_LOCK:
         _RESPONSE_CACHE.clear()
+
+
+def _error_code(resp: Any) -> str:
+    """The ``error.code`` of an error response, or an empty string."""
+    try:
+        error = (resp.json() or {}).get("error") or {}
+        return str(error.get("code") or "") if isinstance(error, dict) else ""
+    except Exception:  # noqa: BLE001 - not JSON
+        return ""
 
 
 def thinking_switch(base_url: str, strong: bool) -> dict[str, str] | None:
@@ -147,6 +156,47 @@ def thinking_switch(base_url: str, strong: bool) -> dict[str, str] | None:
     if "api.deepseek.com" not in (base_url or ""):
         return None
     return {"type": "enabled" if strong else "disabled"}
+
+
+def reasoning_switch(base_url: str, model: str, strong: bool) -> str | None:
+    """Groq's ``reasoning_effort`` for a call, or ``None`` for any other endpoint.
+
+    The gpt-oss models on Groq think before they answer, and the thinking counts
+    against ``max_tokens``.  A cheap call such as ``classify.employer_kind`` has a
+    900-token budget and a short JSON answer; at the default effort the reasoning
+    can use all of it, and Groq then rejects the call with ``json_validate_failed``
+    and an empty ``failed_generation``.  Cheap calls ask for ``low`` (Groq accepts
+    low, medium and high for ``openai/gpt-oss-*``); strong calls keep the default.
+    The field is only sent to that host and model family, since other endpoints
+    reject unknown fields.
+    """
+    if strong or "api.groq.com" not in (base_url or "") or "gpt-oss" not in (model or ""):
+        return None
+    return "low"
+
+
+#: Groq's error code for a JSON-mode call whose answer never got written, which
+#: with a reasoning model means the reasoning used up the output budget.
+_BUDGET_ERROR_CODE = "json_validate_failed"
+#: The ceiling when a call that ran out of budget is retried with a larger one.
+_BUDGET_RETRY_MAX_TOKENS = 8192
+
+
+def error_detail(resp: Any) -> str:
+    """The provider's error code and a short slice of its body, for the log.
+
+    Only the response body, never the request headers (which carry the key).
+    """
+    code = ""
+    body = ""
+    try:
+        body = str(getattr(resp, "text", "") or "")[:300]
+        error = (resp.json() or {}).get("error") or {}
+        if isinstance(error, dict):
+            code = str(error.get("code") or error.get("type") or "")
+    except Exception:  # noqa: BLE001 - a body that isn't JSON is still worth a slice
+        pass
+    return f"status={getattr(resp, 'status_code', '?')} code={code or '-'} body={body!r}"
 
 
 # The steps NFR-306 names as privacy-sensitive, by task group and by task
@@ -520,7 +570,17 @@ class LLMClient:
         local_url = cfg.get("local_base_url") or s.local_llm_base_url
         suffix = task.split(".")[-1]
         labels = {group, suffix, task}
-        if (labels & PRIVACY_SENSITIVE) and (labels & local_tasks) and local_url:
+        if (labels & PRIVACY_SENSITIVE) and (labels & local_tasks):
+            if not local_url:
+                # Listing a task as local means "keep it on this machine".  With
+                # no local model to send it to, the only safe answer is to
+                # refuse; quietly using the cloud endpoint would do the one
+                # thing the listing exists to prevent.
+                raise LLMError(
+                    f"Task {task!r} is set to run on a local model, but no local model "
+                    "URL is configured (DREAMJOB_LOCAL_LLM_BASE_URL). It was not sent "
+                    "to the cloud provider."
+                )
             return (
                 local_url,
                 s.local_llm_api_key,
@@ -689,10 +749,13 @@ class LLMClient:
         # call.  It is tried last on purpose: the main endpoint is the free one,
         # and the fallback is paid for only on the calls the main one dropped.
         endpoints = [(base_url, keys, model, provider)]
-        fallback = self._fallback_endpoint(base_url, strong)
+        # A call routed to the local model (NFR-306) carries personal data that
+        # was deliberately kept off the cloud, so it never falls back to it.
+        fallback = None if provider == "local" else self._fallback_endpoint(base_url, strong)
         if fallback is not None:
             endpoints.append(fallback)
         last_error: Exception | None = None
+        last_detail = ""
         data: dict[str, Any] | None = None
         # The loop variables outlive the loop on purpose: model and provider name
         # the endpoint that answered, for the cost and the FR-364 call log.
@@ -703,6 +766,12 @@ class LLMClient:
                 payload.pop("thinking", None)
             else:
                 payload["thinking"] = thinking
+            effort = reasoning_switch(base_url, model, strong)
+            if effort is None:
+                payload.pop("reasoning_effort", None)
+            else:
+                payload["reasoning_effort"] = effort
+            budget_retried = False
             for attempt in range(retries + 1):
                 try:
                     with httpx.Client(timeout=self.timeout) as client:
@@ -717,9 +786,34 @@ class LLMClient:
                             )
                             if resp.status_code not in _KEY_SPECIFIC_STATUSES:
                                 break
+                        if (
+                            resp.status_code == 400
+                            and not budget_retried
+                            and _error_code(resp) == _BUDGET_ERROR_CODE
+                        ):
+                            # The answer was never written: the reasoning used the
+                            # output budget.  One more try with twice the room.
+                            budget_retried = True
+                            payload["max_tokens"] = min(
+                                int(payload["max_tokens"]) * 2, _BUDGET_RETRY_MAX_TOKENS
+                            )
+                            log.warning(
+                                "LLM task %r ran out of output budget at %s; retrying with "
+                                "max_tokens=%d", task, base_url, payload["max_tokens"],
+                            )
+                            resp = client.post(
+                                f"{base_url.rstrip('/')}/chat/completions",
+                                headers={
+                                    "Authorization": f"Bearer {key}",
+                                    "Content-Type": "application/json",
+                                },
+                                json=payload,
+                            )
                     if resp.status_code in (429, 500, 502, 503, 504) and attempt < retries:
                         time.sleep(2 ** attempt * 2)
                         continue
+                    if resp.status_code >= 400:
+                        last_detail = error_detail(resp)
                     resp.raise_for_status()
                     data = resp.json()
                     break
@@ -738,14 +832,18 @@ class LLMClient:
                         task, base_url, model,
                     )
                 break
-            log.warning("LLM endpoint %s failed for task %r: %s", base_url, task, last_error)
+            log.warning(
+                "LLM endpoint %s failed for task %r: %s %s", base_url, task, last_error, last_detail
+            )
         if data is None:
             self._log_call(
                 task, system, user, "", model, provider, Usage(), entity_type, entity_id,
                 prompt_template, prompt_version, int((time.monotonic() - started) * 1000),
                 status="error", error=str(last_error),
             )
-            raise LLMError(f"LLM call failed for task {task!r}: {last_error}") from last_error
+            raise LLMError(
+                f"LLM call failed for task {task!r}: {last_error} {last_detail}".rstrip()
+            ) from last_error
 
         choice = data["choices"][0]
         text = (choice["message"].get("content") or "").strip()

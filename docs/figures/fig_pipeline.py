@@ -365,7 +365,6 @@ def adapter() -> None:
 
     # --- the population the contract holds ---------------------------------
     items = sorted(facts.ADAPTERS.items(), key=lambda kv: -kv[1])
-    total = sum(v for _, v in items)
     unit = 1.5                       # x units per adapter
     bar_x = 84.0
     y = 84.0

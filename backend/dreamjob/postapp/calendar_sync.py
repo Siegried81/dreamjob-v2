@@ -44,6 +44,7 @@ import asyncio
 import base64
 import logging
 import re
+import secrets
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, time, timedelta
@@ -54,6 +55,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dreamjob.config import get_settings
 from dreamjob.db.connection import to_json, utcnow
+from dreamjob.db.repositories import dispatch as oauth_repo
 from dreamjob.db.repositories import pipeline_cards as repo
 from dreamjob.egress.client import EgressClient
 from dreamjob.llm.client import BudgetExhausted, LLMClient, LLMError
@@ -821,11 +823,63 @@ def authorization_url(provider: str, *, state: str, redirect_uri: str, drive: bo
     raise CalendarUnavailable(f"Unknown calendar provider {provider!r}")
 
 
+#: Backend name under which a calendar handshake is filed in ``mail_oauth_state``,
+#: so a mailbox state can never complete the calendar callback.
+CALENDAR_STATE_BACKEND = "google_calendar"
+STATE_TTL_SECONDS = 600
+
+
+def begin_authorization(
+    job_seeker_id: str, provider: str = "google", *, drive: bool = False
+) -> dict:
+    """Start the handshake: store a single-use state and return the consent URL.
+
+    The redirect is the configured one, never a caller's: Google only accepts
+    the URIs registered on the OAuth client, and a request-supplied redirect
+    would only ever be a way to send the code somewhere else.
+    """
+    settings = get_settings()
+    state = secrets.token_urlsafe(32)
+    url = authorization_url(
+        provider, state=state, redirect_uri=settings.google_calendar_redirect_uri, drive=drive
+    )
+    scopes = list(GOOGLE_SCOPES) + ([GOOGLE_DRIVE_SCOPE] if drive else [])
+    oauth_repo.create_oauth_state(
+        state,
+        job_seeker_id=job_seeker_id,
+        backend=CALENDAR_STATE_BACKEND,
+        code_verifier="",
+        redirect_uri=settings.google_calendar_redirect_uri,
+        scopes=" ".join(scopes),
+        expires_at=(datetime.now(UTC) + timedelta(seconds=STATE_TTL_SECONDS)).isoformat(
+            timespec="seconds"
+        ),
+    )
+    return {"authorization_url": url, "state": state}
+
+
+async def complete_authorization(state: str, code: str) -> dict:
+    """Finish the redirect: consume the state, exchange the code, store the calendar."""
+    row = await asyncio.to_thread(oauth_repo.take_oauth_state, state)
+    if row is None or row["backend"] != CALENDAR_STATE_BACKEND:
+        raise CalendarUnavailable(
+            "This authorisation link has expired or was already used. Start the connection again."
+        )
+    account_id = await exchange_code(
+        "google", code, redirect_uri=row["redirect_uri"], job_seeker_id=row["job_seeker_id"]
+    )
+    return {"id": account_id, "job_seeker_id": row["job_seeker_id"]}
+
+
 async def exchange_code(
-    provider: str, code: str, *, redirect_uri: str, job_seeker_id: str, address: str,
-    timezone: str = DEFAULT_TIMEZONE,
+    provider: str, code: str, *, redirect_uri: str, job_seeker_id: str,
+    address: str | None = None, timezone: str = DEFAULT_TIMEZONE,
 ) -> str:
-    """Trade the authorisation code for tokens and store them encrypted (NFR-204)."""
+    """Trade the authorisation code for tokens and store them encrypted (NFR-204).
+
+    ``address`` is the calendar's own id (the account's e-mail address); when the
+    caller has none it is read from the primary calendar with the new token.
+    """
     settings = get_settings()
     if provider != "google":
         raise CalendarUnavailable(f"No token endpoint configured for {provider!r}")
@@ -848,6 +902,19 @@ async def exchange_code(
     import json  # noqa: PLC0415
 
     payload = json.loads(result.text)
+    if not address:
+        async with EgressClient(respect_robots=False, store_raw=False) as egress:
+            primary = await egress.fetch(
+                f"{GOOGLE_API}/calendars/primary",
+                use_cache=False,
+                access_method="api",
+                headers={"Authorization": f"Bearer {payload.get('access_token', '')}"},
+            )
+        if not primary.ok:
+            raise CalendarUnavailable(
+                f"Could not read the primary calendar: HTTP {primary.status_code}"
+            )
+        address = str(json.loads(primary.text).get("id") or "")
     expires = datetime.now(UTC) + timedelta(seconds=int(payload.get("expires_in") or 3300))
     account_id = await asyncio.to_thread(
         repo.save_calendar_account,

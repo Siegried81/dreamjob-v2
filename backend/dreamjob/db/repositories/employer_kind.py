@@ -445,24 +445,6 @@ def record_verdict(
     return {"written": True, "kept": None}
 
 
-def mark_refreshed(company_id: str, *, now: datetime | None = None) -> bool:
-    """Renew a verdict whose evidence has not changed (no LLM call, no re-read).
-
-    A refresh whose page ``content_hash`` is unchanged renews the row without
-    asking the model anything (research note section 5).
-    """
-    row = get(company_id)
-    if row is None:
-        return False
-    moment = _stamp(now)
-    with write_tx() as conn:
-        conn.execute(
-            f"UPDATE {TABLE} SET refreshed_at = ?, expires_at = ? WHERE company_id = ?",
-            (moment, expires_at_for(Rung(str(row["rung"])), now=now), company_id),
-        )
-    return True
-
-
 def record_attempt(
     company_id: str, reason: Reason | str, *, now: datetime | None = None
 ) -> bool:
@@ -488,12 +470,6 @@ def record_attempt(
             ),
         )
     return True
-
-
-def delete_verdict(company_id: str) -> bool:
-    with write_tx() as conn:
-        cur = conn.execute(f"DELETE FROM {TABLE} WHERE company_id = ?", (company_id,))
-        return cur.rowcount > 0
 
 
 # ---------------------------------------------------------------------------

@@ -724,3 +724,47 @@ def test_the_boundary_score_is_on_the_employer_side():
     assert es.band_for(1.5) == "possible"
     assert es.band_for(3.0) == "probable"
     assert es.band_for(5.0) == "certain"
+
+
+def test_merging_the_registers_signals_lifts_band_recall_and_flags_no_direct_employer(
+    labelled, scored
+):
+    """Measured on the 43 labelled employers, with the register's answer simulated.
+
+    The register outcome is read off the fixture's own label source: an agency
+    whose source cites a KBO 78.x code gets R1; Belgian direct employers, and the
+    two agencies the register files under other codes (100G, EDITX), get D6.  The
+    two names the register cannot answer for (two entities of one name, no hit)
+    get nothing.  Band-level precision stays 1.00; recall rises from 0.55 to 0.65
+    at probable+ and from 0.85 to 0.90 at possible+.
+    """
+    from dreamjob.pipeline import employer_registry_rung as rr
+
+    silent = {"HOUSE OF RECRUITMENT SOLUTIONS BV", "Vermeesch, Kiona", "ACCENT JOBS FOR PEOPLE"}
+    no_78_agencies = {"100G BV", "EDITX BV"}
+    merged: dict[str, tuple[str, es.Signals]] = {}
+    for employer in labelled:
+        label, free = scored[employer["name"]]
+        outcome = None
+        if employer["name"] in silent:
+            pass
+        elif label == "agency" and "KBO 78" in employer["label_source"]:
+            outcome = rr.RegistryOutcome(
+                decision="matched", legal_id="0000000000", staffing_codes=("78200",),
+                activities=[rr.Activity("nsso", "2025", "78.200", "Temporary employment agency")],
+            )
+        elif employer["name"] in no_78_agencies or (
+            label == "direct" and employer["country"] == "BE"
+        ):
+            outcome = rr.RegistryOutcome(decision="matched", legal_id="0000000000")
+        merged[employer["name"]] = (
+            label, free.with_signals(rr.registry_signals(outcome)) if outcome else free
+        )
+
+    for bands in ({"certain", "probable"}, {"certain", "probable", "possible"}):
+        precision, _recall, wrong = _band_pr(merged, bands)
+        assert precision == 1.0, f"{bands} flagged direct employers: {wrong}"
+    assert _band_pr(scored, {"certain", "probable"})[1] == 0.55
+    assert _band_pr(merged, {"certain", "probable"})[1] == 0.65
+    assert _band_pr(scored, {"certain", "probable", "possible"})[1] == 0.85
+    assert _band_pr(merged, {"certain", "probable", "possible"})[1] == 0.90

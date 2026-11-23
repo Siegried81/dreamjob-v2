@@ -397,7 +397,7 @@ export const PAGE_HELP = {
       'Where applications leave from, under what limits, and what became of each one. Two backends are supported and they are not equivalent: only a connected Gmail mailbox can read the answers back.',
     steps: [
       'Connect Gmail with OAuth. It sends from your own address and, because replies and bounces arrive in your own inbox, it is the only backend that detects them for you.',
-      'Resend is the alternative \u2014 a one-way relay from stepvda.com \u2014 but its API key has not been issued yet, so it cannot send today. The Mailboxes tab says exactly what to do when the key exists.',
+      'Resend is the alternative: a one-way relay that needs an API key and a sender address on a domain you verified at Resend. It cannot send as a Gmail address. The Mailboxes tab says what is missing.',
       'Read the sending rules before your first dispatch. The pace, the daily cap and the send window are set on the server and reported here rather than adjusted from this screen.',
       'Use the dispatch log to see what went out: recipient, time, attachments, message id, delivery status, and any bounce or reply.',
       'Set how many days of silence make a follow-up due, then read each draft before it is sent.',
@@ -1042,7 +1042,7 @@ export const GLOSSARY = {
   domain_verification: {
     term: 'Domain verification',
     body:
-      'Resend will only send from a domain whose DNS records prove you control it. Until stepvda.com is verified there, every send is refused by the provider rather than by Dream Job \u2014 and this screen cannot report the state, because asking Resend requires the API key that does not exist yet.',
+      'Resend will only send from a domain whose DNS records prove you control it. Until your sending domain is verified there, every send is refused by the provider rather than by Dream Job, and this screen cannot report the state.',
   },
   webhook_signing_secret: {
     term: 'Webhook signing secret',

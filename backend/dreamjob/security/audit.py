@@ -141,14 +141,9 @@ def record_audit(
     return event_id
 
 
-
 def trail_for_entity(entity_type: str, entity_id: str, limit: int = 100) -> list[dict]:
     """The full history of one record - what NFR-702 is read for."""
     return admin_repo.list_audit(entity_type=entity_type, entity_id=entity_id, limit=limit)
-
-
-def trail_for_seeker(seeker_id: str, limit: int = 200, offset: int = 0) -> list[dict]:
-    return admin_repo.list_audit(job_seeker_id=seeker_id, limit=limit, offset=offset)
 
 
 def log_metric(name: str, **fields: Any) -> None:

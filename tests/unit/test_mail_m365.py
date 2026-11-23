@@ -221,6 +221,26 @@ def test_a_state_minted_for_gmail_is_not_accepted(graph, seeker_id):
         m365.complete_authorization("gmail-state", "the-code")
 
 
+def test_an_abandoned_authorisation_is_cleared_by_the_next_one(seeker_id):
+    from dreamjob.db.connection import query_one
+    from dreamjob.db.repositories import dispatch as repo
+
+    now = datetime.now(UTC)
+
+    def mint(state: str, lifetime: timedelta) -> None:
+        repo.create_oauth_state(
+            state, job_seeker_id=seeker_id, backend="m365_graph", code_verifier="v",
+            redirect_uri="http://127.0.0.1:8000/api/mail/m365/callback", scopes="x",
+            expires_at=(now + lifetime).isoformat(timespec="seconds"),
+        )
+
+    mint("abandoned", timedelta(minutes=-5))
+    mint("fresh", timedelta(minutes=5))
+
+    assert query_one("SELECT 1 FROM mail_oauth_state WHERE state = 'abandoned'") is None
+    assert query_one("SELECT 1 FROM mail_oauth_state WHERE state = 'fresh'") is not None
+
+
 # ---------------------------------------------------------------------------
 # Polling: read, and only read
 # ---------------------------------------------------------------------------

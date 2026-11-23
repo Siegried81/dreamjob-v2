@@ -42,7 +42,6 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urljoin
-from xml.etree import ElementTree
 
 from dreamjob.adapters.base import (
     AccessMethod,
@@ -70,6 +69,7 @@ from dreamjob.adapters.vacancy_source import (
     split_skills,
     title_matches,
 )
+from dreamjob.pipeline import safe_xml
 
 try:  # pragma: no cover - selectolax is a declared dependency
     # selectolax 1.0 dropped the Modest backend (selectolax.parser.HTMLParser);
@@ -250,7 +250,7 @@ class ActirisAdapter(VacancySourceAdapter):
         closed years ago.
         """
         text = sitemap_xml.lstrip("﻿ \t\r\n")
-        root = ElementTree.fromstring(text)
+        root = safe_xml.fromstring(text)
         cutoff = ((today or datetime.now(UTC)) - timedelta(days=max_age_days)).date()
         offers: list[dict[str, Any]] = []
         for node in root.iter(f"{SITEMAP_NS}url"):

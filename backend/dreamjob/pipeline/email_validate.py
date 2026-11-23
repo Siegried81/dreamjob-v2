@@ -598,16 +598,3 @@ def validate_contact(
     return validate(email, allow_smtp=allow_smtp, force=force, contact_id=contact.get("id"))
 
 
-def validate_many(
-    emails: list[str], *, allow_smtp: bool = True, force: bool = False
-) -> dict[str, ValidationResult]:
-    """Validate a batch, grouped by domain so one server is probed in sequence."""
-    ordered = sorted({e.strip().lower() for e in emails if e}, key=lambda e: e.rsplit("@", 1)[-1])
-    return {email: validate(email, allow_smtp=allow_smtp, force=force) for email in ordered}
-
-
-def best_of(results: list[ValidationResult]) -> ValidationResult | None:
-    """Pick the strongest verdict from several candidate addresses."""
-    if not results:
-        return None
-    return max(results, key=lambda r: (VERDICT_RANK.get(r.result, 0), -len(r.email)))

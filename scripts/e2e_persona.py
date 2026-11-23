@@ -22,8 +22,6 @@ import urllib.request
 API = os.environ.get("DREAMJOB_API", "http://127.0.0.1:8000")
 PASSWORD = "Persona-Str0ng!Pass"
 EMAIL = os.environ.get("PERSONA_EMAIL", f"alex.dev+persona-{int(time.time())}@example.com")
-ADMIN_EMAIL = "stephane@stepvda.com"
-ADMIN_PASSWORD = "Adv39281#"
 
 CV_TEXT = [
     ("Alex De Vries", "Senior Backend & Platform Engineer"),

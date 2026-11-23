@@ -62,6 +62,7 @@ from dreamjob.adapters.vacancy_source import (
     split_skills,
     title_matches,
 )
+from dreamjob.pipeline import safe_xml
 
 log = logging.getLogger(__name__)
 
@@ -131,7 +132,7 @@ class TeamtailorAdapter(ATSAdapter):
 
     # -- parse (FR-183) -----------------------------------------------------
     def parse(self, raw: RawRecord) -> list[dict]:
-        root = ElementTree.fromstring(raw.content)
+        root = safe_xml.fromstring(raw.content)
         channel = root.find("channel")
         if channel is None:
             return []

@@ -172,10 +172,6 @@ _COUNTRY_MULTIPLIERS: dict[str, float] = {
 }
 
 
-class CurrencyMismatch(ValueError):
-    """A source is quoted in a currency this estimate cannot convert."""
-
-
 # ---------------------------------------------------------------------------
 # Estimate model
 # ---------------------------------------------------------------------------

@@ -106,13 +106,6 @@ def count(state: str | None = None) -> int:
     return int(row["n"]) if row else 0
 
 
-def counts_by_vendor() -> dict[str, int]:
-    rows = query_all(
-        "SELECT vendor, COUNT(*) AS n FROM board_registry GROUP BY vendor ORDER BY n DESC"
-    )
-    return {str(r["vendor"]): int(r["n"]) for r in rows}
-
-
 def summary(now: datetime | None = None) -> dict[str, int]:
     """What the register knows, in the shape an operator wants to read.
 

@@ -19,6 +19,7 @@ from dreamjob.api.deps import CurrentSeeker, current_seeker, owned_or_404
 from dreamjob.config import get_settings
 from dreamjob.db.connection import from_json, utcnow
 from dreamjob.db.repositories import campaigns as repo
+from dreamjob.db.repositories import profiles as profiles_repo
 from dreamjob.pipeline import collection, knowledge_base, planning
 from dreamjob.pipeline.declines import NoUsableSources
 
@@ -170,6 +171,11 @@ def create_campaign(body: CampaignIn, seeker: Seeker) -> dict:
         owned_or_404("composite_profile", body.composite_profile_id, seeker.id)
     if body.dream_job_model_id:
         owned_or_404("dream_job_model", body.dream_job_model_id, seeker.id)
+    if body.persona_id:
+        owned_or_404("persona", body.persona_id, seeker.id)
+    else:
+        default_persona = profiles_repo.default_persona(seeker.id)
+        body.persona_id = default_persona["id"] if default_persona else None
 
     values: dict[str, Any] = {
         "name": body.name,

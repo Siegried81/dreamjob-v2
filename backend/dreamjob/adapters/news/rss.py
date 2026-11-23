@@ -43,6 +43,7 @@ from dreamjob.adapters.base import (
 from dreamjob.adapters.query_errors import UnusableQuery
 from dreamjob.adapters.website.crawler import extract_text, normalise_url, registrable_domain
 from dreamjob.egress.client import EgressClient, RobotsDisallowed
+from dreamjob.pipeline import safe_xml
 
 log = logging.getLogger(__name__)
 
@@ -180,7 +181,7 @@ def parse_feed(xml: str, feed_url: str = "") -> list[NewsItem]:
     if not xml or len(xml) > MAX_FEED_BYTES:
         return []
     try:
-        root = ElementTree.fromstring(xml.strip())
+        root = safe_xml.fromstring(xml.strip())
     except ElementTree.ParseError:
         return []
 

@@ -606,7 +606,7 @@ def test_a_webhook_backend_is_skipped_with_a_reason(seeker_id: str):
     from dreamjob.mail import inbox
 
     account_id = repo.upsert_account(
-        seeker_id, backend="resend", address="relay@stepvda.test", credentials_enc=b"x"
+        seeker_id, backend="resend", address="relay@example.test", credentials_enc=b"x"
     )
     result = inbox.poll_account(repo.get_account_any(account_id))
 
@@ -620,7 +620,7 @@ def test_poll_all_covers_both_personal_backends_on_one_pass(seeker_id: str, conn
     from dreamjob.mail import inbox
 
     repo.upsert_account(
-        seeker_id, backend="resend", address="relay@stepvda.test", credentials_enc=b"x"
+        seeker_id, backend="resend", address="relay@example.test", credentials_enc=b"x"
     )
     repo.upsert_account(
         seeker_id, backend="gmail_oauth", address="seeker@gmail.test", credentials_enc=b"x"
@@ -756,7 +756,7 @@ def test_a_personal_mailbox_outranks_the_relay_for_sending(seeker_id: str, conne
     from dreamjob.db.repositories import dispatch as repo
 
     repo.upsert_account(
-        seeker_id, backend="resend", address="relay@stepvda.test", credentials_enc=b"x"
+        seeker_id, backend="resend", address="relay@example.test", credentials_enc=b"x"
     )
     assert repo.active_account(seeker_id)["backend"] == "imap_basic"
 

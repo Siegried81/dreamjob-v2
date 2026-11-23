@@ -92,14 +92,6 @@ def identity_for(company_id: str) -> dict[str, Any] | None:
     return query_one(f"SELECT * FROM {TABLE} WHERE company_id = ?", (company_id,))
 
 
-def identities_for(company_ids: list[str]) -> dict[str, dict[str, Any]]:
-    if not company_ids:
-        return {}
-    marks = ", ".join("?" for _ in company_ids)
-    rows = query_all(f"SELECT * FROM {TABLE} WHERE company_id IN ({marks})", tuple(company_ids))
-    return {row["company_id"]: row for row in rows}
-
-
 def ambiguous(limit: int = 100) -> list[dict[str, Any]]:
     """The "which one is it?" queue: names the register holds more than once.
 
@@ -373,13 +365,3 @@ def revocations(limit: int = 200) -> list[dict[str, Any]]:
     )
 
 
-def revocation_summary() -> dict[str, Any]:
-    rows = query_all(
-        f"SELECT reason, COUNT(*) AS n, SUM(contacts_removed) AS contacts "
-        f"  FROM {REVOCATION_TABLE} GROUP BY reason ORDER BY n DESC"
-    )
-    return {
-        "total": sum(int(row["n"]) for row in rows),
-        "contacts_removed": sum(int(row["contacts"] or 0) for row in rows),
-        "by_reason": {str(row["reason"]): int(row["n"]) for row in rows},
-    }

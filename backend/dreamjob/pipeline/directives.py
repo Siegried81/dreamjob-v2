@@ -38,7 +38,12 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from dreamjob.db.connection import from_json
-from dreamjob.pipeline.geocode import commute_minutes, geocode, haversine_km, max_radius_km
+from dreamjob.pipeline.geocode import (
+    geocode,
+    haversine_km,
+    max_radius_km,
+    within_commute,
+)
 
 log = logging.getLogger(__name__)
 
@@ -160,15 +165,6 @@ class TravelTolerance(StrEnum):
     REGULAR = "regular"
     FREQUENT = "frequent"
     EXTENSIVE = "extensive"
-
-
-TRAVEL_MAX_PERCENT: dict[TravelTolerance, int] = {
-    TravelTolerance.NONE: 0,
-    TravelTolerance.OCCASIONAL: 10,
-    TravelTolerance.REGULAR: 25,
-    TravelTolerance.FREQUENT: 50,
-    TravelTolerance.EXTENSIVE: 100,
-}
 
 
 class CommuteMode(StrEnum):
@@ -346,11 +342,6 @@ class WorkArrangementDirectives(_Group):
     contract_types: list[ContractType] = Field(default_factory=list)
     travel_tolerance: TravelTolerance = TravelTolerance.OCCASIONAL
     max_travel_percent: int | None = Field(default=None, ge=0, le=100)
-
-    def travel_ceiling_percent(self) -> int:
-        if self.max_travel_percent is not None:
-            return self.max_travel_percent
-        return TRAVEL_MAX_PERCENT[self.travel_tolerance]
 
 
 class CompensationDirectives(_Group):
@@ -1022,18 +1013,6 @@ def is_excluded(directive_set: DirectiveSetLike, company: Mapping[str, Any] | st
     return exclusion_reason(directive_set, company) is not None
 
 
-def is_explicitly_included(
-    directive_set: DirectiveSetLike, company: Mapping[str, Any] | str | None
-) -> bool:
-    """True for a company on the FR-143 include list (exclusion still wins)."""
-    directives = coerce_directive_set(directive_set)
-    name, domain, legal_id = _company_fields(company)
-    return any(
-        _matches_reference(reference, name, domain, legal_id)
-        for reference in directives.company_type.include_companies
-    )
-
-
 _RECRUITING_ROLE = re.compile(
     r"recruit|talent acquisition|talent partner|human resources|\bhr\b|people (and|&) culture"
     r"|resources humaines|werving|rekruter",
@@ -1343,12 +1322,12 @@ def location_matches(
             if haversine_km(area.latitude, area.longitude, latitude, longitude) <= area.radius_km:
                 return True
         if home is not None and home.is_geocoded and directives.max_commute_minutes is not None:
-            minutes = commute_minutes(
-                haversine_km(home.latitude, home.longitude, latitude, longitude),
+            return within_commute(
+                (home.latitude, home.longitude),
+                (latitude, longitude),
+                directives.max_commute_minutes,
                 directives.commute_mode.value,
             )
-            if minutes <= directives.max_commute_minutes:
-                return True
         return False
 
     # Neither a country nor coordinates: it cannot be shown to be in scope.

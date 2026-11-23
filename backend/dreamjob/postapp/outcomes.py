@@ -33,9 +33,11 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from dreamjob.db.connection import from_json, to_json, utcnow
+from dreamjob.db.connection import to_json, utcnow
 from dreamjob.db.repositories import opportunities as opp_repo
 from dreamjob.db.repositories import pipeline_cards as repo
+from dreamjob.pipeline import scoring
+from dreamjob.postapp.board import decode_variables
 from dreamjob.security.audit import record_audit
 
 log = logging.getLogger(__name__)
@@ -145,18 +147,6 @@ def capture_variables(job_seeker_id: str, application_package_id: str) -> dict[s
         "sent_at": sent_at,
         "captured_at": utcnow(),
     }
-
-
-def record_send(job_seeker_id: str, application_package_id: str, opportunity_id: str) -> dict:
-    """Called when an application is sent: opens the card with its variables."""
-    from dreamjob.postapp import board  # noqa: PLC0415 - board calls back into capture_variables
-
-    return board.ensure_card(
-        job_seeker_id,
-        application_package_id=application_package_id,
-        opportunity_id=opportunity_id,
-        variables=capture_variables(job_seeker_id, application_package_id),
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -376,9 +366,7 @@ def analyse(
 
     buckets: dict[tuple[str, str], list[bool]] = defaultdict(list)
     for card, flags in resolved:
-        variables = card.get("variables") or {}
-        if isinstance(variables, str):
-            variables = from_json(variables, {}) or {}
+        variables = decode_variables(card)
         for variable in VARIABLES:
             value = variables.get(variable)
             if value in (None, "", "unknown"):
@@ -463,24 +451,26 @@ def _weights_from(effects: list[Effect], job_seeker_id: str) -> dict[str, Any]:
     the opportunity rather than about the letter: whether it was a real vacancy
     or a speculative opening, and whether a warm introduction existed.
     """
-    current = (opp_repo.get_weights(job_seeker_id) or {}).get("weights") or {}
+    # Keyed by component, the keys the scorer reads, and starting from the
+    # weights it actually uses (stored ones, or the defaults).
+    current = scoring.load_weights(job_seeker_id)
     proposed: dict[str, float] = {}
     reasons: list[str] = []
 
     mapping = {
-        "opportunity_kind": ("score_plausibility", "speculative"),
-        "has_introduction_path": ("score_reachability", "yes"),
+        "opportunity_kind": ("plausibility", "speculative"),
+        "has_introduction_path": ("reachability", "yes"),
     }
     for effect in effects:
         target = mapping.get(effect.variable)
         if not target or effect.evidence != "suggestive":
             continue
-        column, trigger = target
+        component, trigger = target
         if effect.value != trigger:
             continue
-        base = float(current.get(column, 1.0))
+        base = current[component]
         shift = max(-MAX_WEIGHT_SHIFT, min(MAX_WEIGHT_SHIFT, effect.lift))
-        proposed[column] = round(base * (1 + shift), 3)
+        proposed[component] = round(base * (1 + shift), 4)
         reasons.append(effect.sentence())
         effect.applied = True
 
@@ -552,10 +542,11 @@ def apply_learning(job_seeker_id: str, *, outcome: str = "reply") -> dict[str, A
 
     proposed = analysis.weight_adjustment.get("proposed") or {}
     if proposed:
-        current = (opp_repo.get_weights(job_seeker_id) or {}).get("weights") or {}
+        # Re-normalised inside the FR-285 band: a nudge on top of a nudge must
+        # not walk a weight past the band the learned weights are held to.
         opp_repo.save_weights(
             job_seeker_id,
-            {**current, **proposed},
+            scoring.normalise_within_band({**scoring.load_weights(job_seeker_id), **proposed}),
             learned_from={
                 "source": "FR-425 outcome learning",
                 "sample_size": analysis.closed,
