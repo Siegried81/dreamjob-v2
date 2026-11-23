@@ -11,7 +11,6 @@ import json
 import types
 
 import pytest
-
 from dreamjob.config import get_settings
 from dreamjob.db.connection import (
     execute,

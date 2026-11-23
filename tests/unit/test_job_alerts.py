@@ -26,7 +26,6 @@ import email.policy
 from email.message import EmailMessage
 
 import pytest
-
 from dreamjob.db.connection import query_all
 from dreamjob.db.repositories import admin as admin_repo
 from dreamjob.db.repositories import pipeline_cards as repo

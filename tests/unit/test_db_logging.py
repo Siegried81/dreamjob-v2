@@ -23,7 +23,12 @@ from dreamjob.db.connection import insert_row, query_all, query_one, update_row,
 from dreamjob.db.migrator import migrate
 from dreamjob.observability import db_logging
 
-FAKE_EMAIL = "nobody@example.invalid"
+# The local part is a token no prose contains.  A plain word such as "nobody"
+# also appears in migration comments, which are logged whenever a migration
+# crosses the 5 ms threshold (as it does under load); the privacy check below
+# would then fire on a SQL comment rather than on the address.
+FAKE_EMAIL = "dj-probe-7f3a@example.invalid"
+FAKE_LOCAL = FAKE_EMAIL.split("@")[0]
 FAKE_PHONE = "+31 6 12345678"
 
 _ENV_KEYS = (
@@ -112,7 +117,7 @@ def test_slow_statement_is_logged_at_warning_without_its_bind_parameters(
 
     # The whole point: nothing anywhere in the file carries the address.
     assert FAKE_EMAIL not in text
-    assert "nobody" not in text
+    assert FAKE_LOCAL not in text
     assert "?" in line                      # the value became a placeholder
 
 
