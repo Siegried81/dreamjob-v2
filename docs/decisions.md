@@ -217,3 +217,28 @@ each label source (no live register run was possible):
 
 Seven employers change band, none towards agency among the direct ones. Detail in
 `docs/Employer_Kind_Results.md` section 9.
+
+## 2026-11-23: a privacy-routed LLM task never reaches the cloud
+
+A task listed in `DREAMJOB_LOCAL_LLM_TASKS` (profile, CV, motivation, NFR-306)
+went to the local model, but when that call failed the client tried the paid
+fallback endpoint with the same prompt, and with no local URL set the task went
+to the cloud without a word. Both defeated the listing. Now a privacy-routed
+call never gets the fallback endpoint, and a listed task with no local URL raises
+an `LLMError` that says so. Tasks that aren't listed behave as before. This
+matches the DPIA, which presents the local model as the way to remove the
+transfer entirely for these steps.
+
+
+## 2026-11-23: a reasoning model that runs out of budget gets a second try
+
+On Groq's gpt-oss models the reasoning counts against `max_tokens`. A cheap call
+such as `classify.employer_kind` (900 tokens) could use all of it and come back as
+`400 json_validate_failed` with an empty `failed_generation`; the client treated
+a 400 as final and, with no fallback key, the employer got no verdict. Cheap calls
+to Groq gpt-oss now send `reasoning_effort: "low"` (strong calls keep the
+default), and a `json_validate_failed` 400 is retried once on the same endpoint
+with twice the `max_tokens` (up to 8,192). If that fails too, the call raises as
+before and the website rung retries once on the strong model. The "LLM endpoint
+failed" warning and the `LLMError` now carry the provider's status, error code and
+the first 300 characters of the response body, never the request headers or the key.

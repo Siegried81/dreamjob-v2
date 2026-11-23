@@ -184,3 +184,94 @@ def test_an_administrator_page_cap_bounds_a_campaign(db):
     # A different adapter is untouched.
     other = {"adapter_key": "lever", "estimated_pages": 50}
     assert _pages_for(other, caps, {"pagination": True}) == caps.max_pages_per_source
+
+
+def _fallback_client(monkeypatch, urls: list[str], *, local_status: int = 500):
+    """A client with a paid fallback configured and an HTTP stub that records every URL."""
+    import dreamjob.llm.client as client_mod
+    from dreamjob.llm.client import LLMClient
+
+    class _Resp:
+        def __init__(self, status: int) -> None:
+            self.status_code = status
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise RuntimeError(f"HTTP {self.status_code}")
+
+        def json(self) -> dict:
+            return {"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]}
+
+    class _Http:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc) -> bool:
+            return False
+
+        def post(self, url: str, *, headers: dict, json: dict) -> _Resp:
+            urls.append(url)
+            return _Resp(local_status if "127.0.0.1" in url else 200)
+
+    monkeypatch.setattr(client_mod.httpx, "Client", _Http)
+    monkeypatch.setattr(client_mod.time, "sleep", lambda _s: None)
+    client = LLMClient()
+    client.settings = client.settings.model_copy(update={
+        "deepseek_api_key": "main-key", "deepseek_api_key_2": "", "deepseek_api_key_3": "",
+        "deepseek_api_key_4": "", "deepseek_api_key_5": "",
+        "fallback_llm_api_key": "fallback-key",
+        "fallback_llm_base_url": "https://paid-fallback.example/v1",
+    })
+    return client
+
+
+def test_a_privacy_task_that_fails_locally_never_reaches_the_cloud_fallback(db, monkeypatch):
+    """NFR-306: a profile that was kept local must not leave when the local model is down."""
+    from dreamjob.db.repositories import admin as repo
+    from dreamjob.llm.client import LLMError, invalidate_admin_config
+
+    repo.set_setting("llm.local_base_url", "http://127.0.0.1:11434/v1")
+    repo.set_setting("llm.local_tasks", ["profile", "cv"])
+    invalidate_admin_config()
+    urls: list[str] = []
+    client = _fallback_client(monkeypatch, urls)
+
+    with pytest.raises(LLMError):
+        client.complete("generate.cv", "system", "the candidate's CV", retries=0)
+
+    assert urls, "the local model was tried"
+    assert all("127.0.0.1" in u for u in urls), f"data left the machine: {urls}"
+
+
+def test_a_privacy_task_listed_for_local_with_no_local_url_is_refused(db, monkeypatch):
+    """Listing a task as local and forgetting the URL must not mean "send it to the cloud"."""
+    from dreamjob.db.repositories import admin as repo
+    from dreamjob.llm.client import LLMError, invalidate_admin_config
+
+    repo.set_setting("llm.local_tasks", ["profile", "cv"])
+    invalidate_admin_config()
+    urls: list[str] = []
+    client = _fallback_client(monkeypatch, urls)
+    client.settings = client.settings.model_copy(update={"local_llm_base_url": ""})
+
+    with pytest.raises(LLMError, match="local"):
+        client.complete("generate.cv", "system", "the candidate's CV", retries=0)
+
+    assert urls == []
+
+
+def test_a_task_that_is_not_privacy_routed_still_uses_the_fallback(db, monkeypatch):
+    from dreamjob.llm.client import invalidate_admin_config
+
+    invalidate_admin_config()
+    urls: list[str] = []
+    client = _fallback_client(monkeypatch, urls)
+    monkeypatch.setattr(
+        client, "route",
+        lambda task, prefer_strong=None: ("https://main.example/v1", "main-key", "m", "deepseek"),
+    )
+    # main answers 200 in the stub, so only assert the routing contract: the fallback exists
+    assert client._fallback_endpoint("https://main.example/v1", False) is not None

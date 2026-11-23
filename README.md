@@ -6,18 +6,32 @@
 
 **AI-assisted job discovery and application platform.**
 
-Most job search tools react to what has been published. Dream Job starts from
-who you are and what you want, maps the relevant slice of the market, including
-companies that haven't advertised, judges each company's capacity and likelihood
-to hire, and then removes the friction of applying. It collects what your
-directives justify rather than downloading the world, and nothing is sent
+Dream Job helps you find work and apply for it. You say who you are and what
+you want. It looks at the market, including companies that haven't advertised
+anything, works out which ones can pay and are likely to hire, and prepares your
+applications. It collects only what your directives justify, and nothing is sent
 without your approval. It is built to the *Dream Job* Software Requirements
 Specification v0.3.
 
 Dream Job started as [stepvda/dreamjob](https://github.com/stepvda/dreamjob).
 This repository is my own continuation, started from one snapshot (commit
 `422d760`, 2026-10-06), so its history begins there. The snapshot carried 2,193
-of the 2,530 tests the CI command runs today.
+of the 2,538 tests the CI command runs today.
+
+## What I built here
+
+Everything below is in `git log 422d760..HEAD` (over 100 commits since the snapshot).
+I added CI (ruff, tests, the frontend build) and Dependabot, the Windows fixes
+(tzdata, line endings), the Dockerfile and the image publishing, an SSRF block in
+the egress client and a security policy. On the product side: the `imap_basic`
+mail backend, a read-only Microsoft 365 inbox, WebAuthn passkeys, job-alert
+ingestion, distance search with a map, the French register adapter, a
+search-provider form, the Qdrant and API side of the semantic index, vacancy
+de-duplication and the stale-vacancy purge, and the employer-kind gates on the
+research passes. The last audit added test network isolation, the wired
+employer-kind helpers with a before and after measurement and its eval script,
+Google Calendar OAuth, safe XML parsing, and a fix that keeps privacy-routed
+LLM calls off the cloud fallback.
 
 ## What it does
 
@@ -59,7 +73,16 @@ python3 scripts/bootstrap.py     # schema + the administrator named in DREAMJOB_
 Open http://127.0.0.1:5173 (API reference at http://127.0.0.1:8000/docs). The
 package lives under `backend/` and isn't installed by `requirements.txt`, so
 every `python -m dreamjob...` command needs `PYTHONPATH=backend`; `scripts/dev.sh`
-sets it. Migrations run at startup. Mail, a local model, semantic search,
+sets it. Migrations run at startup.
+
+Mail is a dry run by default: messages are composed and stopped just before
+sending. To send for real, set `DREAMJOB_MAIL_DRY_RUN=false` and connect a
+mailbox (Gmail, or `DREAMJOB_MAIL_FROM` plus a Resend key). The Apply Browser
+needs two more switches, `DREAMJOB_APPLY_ALLOW_SEND=true` in the environment and
+the administration setting `apply.send_enabled`. Restart after changing the
+environment.
+
+Mail, a local model, semantic search,
 Google Calendar, Docker and every setting are in
 [Technical Architecture, section 12](docs/Technical_Architecture.md#12-setup-configuration-and-operation).
 
@@ -78,10 +101,10 @@ unit tests refuse every host but loopback. A Playwright e2e harness lives under
 
 ## Key numbers
 
-2,515 of 2,530 tests pass offline, 15 skipped, none failing (the 15 need the
+2,523 of 2,538 tests pass offline, 15 skipped, none failing (the 15 need the
 gitignored personal export and CV; 9 more skip until `frontend/dist` is built).
-The run takes 9 to 15 minutes, depending on the machine. 247 Python modules (128,964 lines), 147 JS
-modules (45,056 lines), 152 test files (71,845 lines), 23 routers and 364 API
+The run takes 9 to 15 minutes, depending on the machine. 247 Python modules (129,062 lines), 147 JS
+modules (45,057 lines), 153 test files (72,074 lines), 23 routers and 364 API
 paths, 101 tables, 158 indexes, 46 migrations, 36 source adapters (30 enabled),
 24 versioned prompt templates, 21 help screens and 142 glossary terms. 156 of 157
 specification requirements are cited in the source (103/104 Must, 44/44 Should,
@@ -107,6 +130,11 @@ specification requirements are cited in the source (103/104 Must, 44/44 Should,
   bounces). The Mail screen has no button for it, and job alerts are read from
   Gmail or IMAP only.
 - **Google Calendar** connects through the API only; there is no screen for it.
+- **Nothing is kept off the cloud by default.** `DREAMJOB_LOCAL_LLM_TASKS` is empty,
+  so profile, CV and motivation calls go to DeepSeek, which processes data
+  outside the EU. List those tasks and set `DREAMJOB_LOCAL_LLM_BASE_URL` to keep
+  them on a local model; a task listed without a URL is refused, and a failed
+  local call never falls back to the cloud.
 - **Profile enrichment searches DuckDuckGo** unless a search provider is
   switched on, and DuckDuckGo returns a bot-check page from datacentre ranges.
 

@@ -1,4 +1,4 @@
-# Dream Job — Technical Architecture
+# Dream Job: Technical Architecture
 
 | | |
 |---|---|
@@ -6,14 +6,14 @@
 | Version | 1.1 |
 | Date | 11 September 2026 |
 | Status | Describes the implemented system |
-| Specifies | Dream Job SRS v0.3, technology constraints CR-407–CR-410 |
+| Specifies | Dream Job SRS v0.3, technology constraints CR-407 to CR-410 |
 | Companion | [Functional Design](Functional_Design.md) · [DPIA](DPIA.md) |
 
 ---
 
 ## 1. Constraints and what follows from them
 
-The SRS fixes the stack (§2.5, CR-407–CR-410). Everything below is a consequence
+The SRS fixes the stack (§2.5, CR-407 to CR-410). Everything below is a consequence
 of taking those constraints seriously rather than working around them.
 
 | Layer | Fixed choice | What it forces |
@@ -68,10 +68,11 @@ of taking those constraints seriously rather than working around them.
 ```
 
 **Scale** (`backend/**/*.py`, `frontend/**/*.{js,jsx}`, `tests/**/*.py`).
-247 Python modules / 128,964 lines · 147 JS modules / 45,056 lines · 152 test
-files / 71,845 lines · 46 migrations · 24 versioned prompt templates · 36
+247 Python modules / 129,062 lines · 147 JS modules / 45,057 lines · 153 test
+files / 72,074 lines · 46 migrations · 24 versioned prompt templates · 36
 declared source adapters, 30 of them enabled. The offline pass count is in
-`README.md`.
+`README.md`. Lines are counted with `git ls-files 'backend/*.py' | xargs cat | wc -l`,
+and the same with `frontend/*.js frontend/*.jsx` and `tests/*.py`.
 
 ---
 
@@ -79,7 +80,7 @@ declared source adapters, 30 of them enabled. The offline pass count is in
 
 The architecture rests on funnelling five concerns through exactly one place
 each. That is what makes the corresponding requirements *enforceable* rather
-than aspirational — each is a property of one module, not a convention 245
+than aspirational, each is a property of one module, not a convention 245
 modules have to remember. Two more funnels were added as the Discover phase
 grew: the employer-kind verdict and the company-domain decision.
 
@@ -93,7 +94,7 @@ grew: the employer-kind verdict and the company-domain decision.
 | Every employer-kind verdict | `pipeline/employer_resolver.py` | FR-341, NFR-402 no verdict without evidence |
 | Every company-domain decision | `pipeline/company_domains.py` | DR-101 identity, NFR-402 provenance |
 
-### 3.1 Persistence — `db/`
+### 3.1 Persistence: `db/`
 
 ```python
 read_tx()    # concurrent readers under WAL
@@ -106,39 +107,39 @@ at the boundary. Migrations are forward-only `NNN_name.sql` files with a
 recorded checksum; editing an applied migration is a warning, not a silent
 divergence.
 
-**Schema shape.** 92 logical tables across 46 migrations — 49 seeker-scoped, 40
+**Schema shape.** 92 logical tables across 46 migrations (49 seeker-scoped, 40
 shared, one migration ledger, and two FTS5 virtual tables; the nine FTS5 shadow
-tables take `sqlite_master` to 101 — plus a
+tables take `sqlite_master` to 101) plus a
 `usable_contact` view that encodes the objection rule at the database:
 
-- **Private** — carry `job_seeker_id`: profile and versions, conflicts, skills,
+- **Private** tables carry `job_seeker_id`: profile and versions, conflicts, skills,
   evidence, personas, enrichment findings, composite profile, dream job model,
   directives, campaigns, plan items, opportunities, application packages,
   dispatches, replies, pipeline cards, mock interviews, gap analyses, exports,
   watchlist entries, apply selections and the apply preference.
-- **Shared** — the knowledge base, carrying **no** link back to a job seeker:
+- **Shared**: the knowledge base, carrying **no** link back to a job seeker:
   companies, company domains and domain candidates, financial years and
   analyses, competitor links, hiring signals, employer-kind verdicts and
   resolution attempts, registry identity, review summaries, vacancies,
   compensation observations, board registry, company seed, embeddings, raw
   documents, events, geocoded places and source catalogue.
-- **Restricted** — `contact`, which is shared *except* when collected through
+- **Restricted**: `contact`, which is shared *except* when collected through
   browser automation, where `shareable = 0`, `owning_campaign_id` is set and
   `retention_until` applies (NFR-303).
 
-Full-text search over companies and vacancies uses FTS5 — `vacancy_fts` is
+Full-text search over companies and vacancies uses FTS5, `vacancy_fts` is
 external-content with write triggers, and `company_fts` is keyed on the
 company row id, so a write no longer scans the corpus (NFR-103).
 
-### 3.2 Egress — `egress/client.py`
+### 3.2 Egress: `egress/client.py`
 
 One async client for all outbound HTTP.
 
 - **robots.txt** parsed and cached per domain; a disallowed fetch raises rather
   than proceeding. A successful parse is cached for a day, a failure for five
   minutes, and an **unreachable** robots file is itself a refusal rather than a
-  silent go-ahead. The one narrow exception is a non-crawl probe — a domain
-  reachability check or a geocoding lookup — which may be waived explicitly
+  silent go-ahead. The one narrow exception is a non-crawl probe, a domain
+  reachability check or a geocoding lookup, which may be waived explicitly
   rather than by default.
 - **Per-domain pacing** with exponential back-off on 429/503 and relief on
   success. Concurrency capped by semaphore (NFR-102 asks for at least 20), with a
@@ -150,7 +151,7 @@ One async client for all outbound HTTP.
   content-hash path and registered in `raw_document`, so extractors can be
   re-run when they improve.
 
-### 3.3 LLM — `llm/client.py`
+### 3.3 LLM: `llm/client.py`
 
 ```python
 llm.complete_json(
@@ -162,14 +163,13 @@ llm.complete_json(
 ```
 
 - **Routing (FR-362, NFR-306).** Administrator settings beat `.env`; a per-task
-  model override beats the cheap/strong split; privacy-sensitive tasks —
-  composite profile, tailored CV, motivation document — route to a local
+  model override beats the cheap/strong split; privacy-sensitive tasks (composite profile, tailored CV, motivation document) route to a local
   OpenAI-compatible endpoint when one is configured. Settings are cached 30
   seconds and invalidated on save, so a change on the admin screen takes effect
   on the next call rather than the next restart.
 - **Budget (NFR-104).** Checked before each call, debited after. `should_degrade()`
-  lets the pipeline shed optional work — speculative openings for low-ranked
-  companies first — instead of stopping mid-campaign.
+  lets the pipeline shed optional work, speculative openings for low-ranked
+  companies first, instead of stopping mid-campaign.
 - **Injection defence (NFR-205).** Scraped text is fenced in labelled untrusted
   blocks, fence delimiters neutralised, known injection phrasings annotated
   rather than removed (the model still sees the page, visibly marked). A system
@@ -193,7 +193,7 @@ output can be tied to the prompt revision that caused it. There are **24
 templates**, and the planner asks the cheap model first and escalates to the
 strong model only when the first call fails to produce a usable plan.
 
-### 3.4 Adapters — `adapters/base.py`
+### 3.4 Adapters: `adapters/base.py`
 
 Four methods, and the pipeline calls nothing else:
 
@@ -220,7 +220,7 @@ selectors, then LLM extraction. Success rate is tracked per adapter so layout
 breakage surfaces within one campaign (NFR-403), and a register's explicit "no"
 is recorded as an answer rather than treated as a failure.
 
-### 3.5 Jobs — `jobs/runner.py`
+### 3.5 Jobs: `jobs/runner.py`
 
 In-process asyncio. Each job checkpoints after every unit of work, so a crash
 loses at most the page in flight (NFR-401). `checkpoint_barrier()` is where a
@@ -252,7 +252,7 @@ one-writer invariant.
 **Known gaps**, stated rather than glossed: passkeys work on `localhost`
 unless the relying party is configured for another host, and their
 attestation is not verified. The SQLite file itself is not
-encrypted, so whole-database confidentiality rests on disk encryption —
+encrypted, so whole-database confidentiality rests on disk encryption,
 SQLCipher would add a dependency.
 
 ---
@@ -261,13 +261,12 @@ SQLCipher would add a dependency.
 
 **React 19 + Vite 8 + react-router-dom v7.** Five dependencies in total: react,
 react-dom, react-router-dom, vite, @vitejs/plugin-react. No UI kit, no chart
-library, no date library, no state manager — charts are inline SVG, icons are
+library, no date library, no state manager, charts are inline SVG, icons are
 inline SVG, state is hooks plus one session context.
 
 The shell presents the product as **three steps plus Advanced**: Start here,
-1·Your profile, 2·Opportunities, 3·Apply, Follow up, with every deeper screen —
-directives, campaigns, companies, intelligence, networking, monitoring, mail,
-admin — folded under one Advanced disclosure so a first-time user meets the
+1·Your profile, 2·Opportunities, 3·Apply, Follow up, with every deeper screen (directives, campaigns, companies, intelligence, networking, monitoring, mail,
+admin) folded under one Advanced disclosure so a first-time user meets the
 spine, not the whole surface.
 
 **Route-level code splitting.** 24 lazy page chunks (26 async chunks including
@@ -275,10 +274,10 @@ the workflow map and the employer panel) behind a shared shell:
 
 ```
 initial   318 KB JS + 59 KB CSS  (107 + 12 KB gzip)  shell + design system + router
-per page  6–88 KB (2–24 KB gzip) loaded on navigation
+per page  6-88 KB (2-24 KB gzip) loaded on navigation
 ```
 
-Down from 858 KB unsplit — the administration area and the PDF previews no
+Down from 858 KB unsplit, the administration area and the PDF previews no
 longer load before the profile page can paint (NFR-101).
 
 **Design system.** One `app.css` of tokens and layout, one `theme.css` that
@@ -302,8 +301,8 @@ Body text stays near-neutral; colour carries identity and state and never has to
 be read. Speculative openings hold a hue outside all five phases, so FR-263
 survives on colour alone. `prefers-reduced-motion` disables animation.
 
-**Help is structural, not optional.** All copy lives in `help/content.js` — 21
-screen entries and 142 glossary terms — so it is reviewable as a whole and
+**Help is structural, not optional.** All copy lives in `help/content.js`, 21
+screen entries and 142 glossary terms, so it is reviewable as a whole and
 translatable as a unit (NFR-501). A screen cannot ship without help because the
 drawer resolves its content from the route. **311 inline concept tips** across
 the screens; `?` opens the panel anywhere.
@@ -317,7 +316,7 @@ The quickstart is in the README; every other setting is in section 12.
 Production is the same process serving the built SPA from `frontend/dist`.
 Migrations run at startup. The **monitoring scheduler autostarts inside the API
 process at boot** (controlled by `DREAMJOB_SCHEDULER_ENABLED`, with
-`DREAMJOB_SCHEDULER_AUTOSTART` as an override) and runs twelve tasks — vacancy refresh,
+`DREAMJOB_SCHEDULER_AUTOSTART` as an override) and runs twelve tasks, vacancy refresh,
 job-alert e-mails, reply and bounce polling, watchlist rechecks, automatic company
 enrichment, continuous collection (idle until switched on in Admin), geolocation,
 follow-ups, outcome learning, the weekly digest, contact retention and LLM log
@@ -379,7 +378,7 @@ directives + composite profile + dream job model
 
 Every stage persists its artefacts and can be re-run independently (NFR-603).
 The resolution ladders run before profiling so a posting is attributed to the
-right company — and an agency or an undisclosed employer is labelled, not
+right company, and an agency or an undisclosed employer is labelled, not
 profiled as if it were the client.
 
 ---
@@ -398,9 +397,9 @@ profiled as if it were the client.
 
 ## 9. Testing
 
-**2,578 tests collected, 71,845 lines across 152 files** (`tests/**/*.py`;
-`-m 'not llm and not load'` deselects 14, leaving 2,564, of which the CI
-command's `tests/unit tests/integration` runs 2,530. The offline pass count is
+**2,586 tests collected, 72,074 lines across 153 files** (`tests/**/*.py`;
+`-m 'not llm and not load'` deselects 14, leaving 2,572, of which the CI
+command's `tests/unit tests/integration` runs 2,538. The offline pass count is
 in `README.md`).
 Each runs against a migrated temporary database and without network access; LLM
 and HTTP paths are stubbed or skipped, and the network and load tests are
@@ -411,7 +410,7 @@ The tests worth naming are the ones that encode a requirement rather than a
 function:
 
 - A private table added by a **later migration** is still exported and erased
-  (FR-108) — coverage is derived from the live schema, so a new table cannot be
+  (FR-108), coverage is derived from the live schema, so a new table cannot be
   silently missed.
 - Manual ranking survives recalculation (FR-284).
 - A second job seeker's data appears nowhere in an export (FR-463).
@@ -457,7 +456,7 @@ normalised, and the dream-job model generated through the live DeepSeek API.
 
 ## 11. Requirement traceability
 
-**156 of 157 requirements (99%)** are cited in the implementation — 103/104
+**156 of 157 requirements (99%)** are cited in the implementation, 103/104
 Must, 44/44 Should, 9/9 Could. Regenerate the matrix with:
 
 ```bash

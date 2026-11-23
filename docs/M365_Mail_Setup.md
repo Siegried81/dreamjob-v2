@@ -1,4 +1,4 @@
-# Microsoft 365 mail — the app registration to create
+# Microsoft 365 mail: the app registration to create
 
 Dream Job reads a Microsoft 365 (work or school) or Outlook.com / Hotmail
 (personal) inbox through Microsoft Graph, **read-only**, to detect replies and
@@ -14,9 +14,9 @@ here is created by Dream Job itself.
    applications (for a personal Outlook.com mailbox, any Microsoft account works
    at <https://portal.azure.com> > *Microsoft Entra ID*).
 2. *Identity* > *Applications* > *App registrations* > **New registration**.
-3. **Name**: `Dream Job (local)` — any name; the job seeker sees it on the
+3. **Name**: `Dream Job (local)`: any name; the job seeker sees it on the
    consent screen.
-4. **Supported account types** — choose one, and set `M365_TENANT` to match:
+4. **Supported account types**: choose one, and set `M365_TENANT` to match:
 
    | Choice in the portal | `M365_TENANT` |
    |---|---|

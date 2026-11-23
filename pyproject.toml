@@ -3,7 +3,7 @@ name = "dreamjob"
 version = "0.1.0"
 description = "Dream Job - AI-assisted job discovery and application platform"
 requires-python = ">=3.11"
-authors = [{ name = "Stephane van der Aa", email = "stephane@stepvda.com" }]
+authors = [{ name = "Siegried Camus" }, { name = "Stephane van der Aa", email = "stephane@stepvda.com" }]
 
 [project.optional-dependencies]
 # Only for DREAMJOB_SEMANTIC_BACKEND=qdrant; the default sqlite backend needs
