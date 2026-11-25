@@ -446,6 +446,15 @@ def _handles_from_url(url: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+# The only decoders tried on a photo: the raster formats a web page serves, plus
+# those a CV embeds (BMP in a .docx, JPEG 2000 or TIFF from a PDF via pypdf),
+# since the seeker's own portrait is hashed here too. Pillow otherwise tries
+# every format it knows, and for EPS it shells out to Ghostscript when one is
+# installed, so a crafted file posing as a profile picture could reach it.
+# Anything outside the list is no signal.
+PHOTO_FORMATS = ("JPEG", "PNG", "WEBP", "GIF", "AVIF", "BMP", "TIFF", "JPEG2000")
+
+
 def perceptual_hash(image_bytes: bytes) -> int | None:
     """64-bit difference hash.
 
@@ -459,7 +468,7 @@ def perceptual_hash(image_bytes: bytes) -> int | None:
         log.warning("Pillow unavailable; photo similarity signal disabled")
         return None
     try:
-        with Image.open(io.BytesIO(image_bytes)) as img:
+        with Image.open(io.BytesIO(image_bytes), formats=PHOTO_FORMATS) as img:
             small = img.convert("L").resize((9, 8), Image.LANCZOS)
             pixels = list(small.getdata())
     except Exception:  # noqa: BLE001 - a broken image is simply no signal

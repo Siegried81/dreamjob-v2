@@ -269,6 +269,39 @@ def test_photo_similarity_uses_a_perceptual_hash() -> None:
     assert idm.perceptual_hash(_png(200)) is None
 
 
+def test_a_postscript_photo_is_never_handed_to_the_eps_decoder(monkeypatch) -> None:
+    """A downloaded photo is decoded only as a raster format the web serves.
+
+    Pillow reads EPS by calling Ghostscript when it is installed, so a crafted
+    EPS served as a profile picture would run through Ghostscript
+    (CVE-2026-125396, "Upload2Shell"). The EPS decoder must not even be tried;
+    the photo simply gives no signal, like any undecodable image.
+    """
+    from PIL import EpsImagePlugin
+
+    calls: list[object] = []
+
+    def refuse(self) -> None:
+        calls.append(self)
+        raise AssertionError("EPS decoder reached")
+
+    monkeypatch.setattr(EpsImagePlugin.EpsImageFile, "_open", refuse)
+    eps = b"%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 10 10\n"
+    assert idm.perceptual_hash(eps) is None
+    assert calls == []
+
+
+@pytest.mark.parametrize("fmt", idm.PHOTO_FORMATS)
+def test_every_allowed_photo_format_still_hashes(fmt: str) -> None:
+    """The allowlist must not cost a real portrait its signal: a CV photo comes
+    as BMP from a .docx or JPEG 2000/TIFF from a PDF, a web one as JPEG to AVIF."""
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.radial_gradient("L").convert("RGB").save(buffer, format=fmt)
+    assert idm.perceptual_hash(buffer.getvalue()) is not None
+
+
 def test_photo_signal_contributes_when_the_portrait_matches() -> None:
     from PIL import Image
 

@@ -242,3 +242,14 @@ with twice the `max_tokens` (up to 8,192). If that fails too, the call raises as
 before and the website rung retries once on the strong model. The "LLM endpoint
 failed" warning and the `LLMError` now carry the provider's status, error code and
 the first 300 characters of the response body, never the request headers or the key.
+
+## 2026-11-25: photos are decoded only as known raster formats
+
+`identity_match.perceptual_hash` opens bytes with `formats=PHOTO_FORMATS`: JPEG,
+PNG, WEBP, GIF and AVIF (what a web page serves), plus BMP, TIFF and JPEG 2000
+(what a CV embeds: BMP in a .docx, the other two from a PDF via pypdf). Pillow
+reads EPS by calling Ghostscript when one is installed, and Upload2Shell
+(CVE-2026-125396) makes a crafted file a code-execution path; candidate photos
+come from arbitrary web pages. No machine or image here has Ghostscript today.
+A photo in any other format gives no photo signal, as an undecodable one already
+did. Revisit if a real portrait turns up in a format outside the list.
