@@ -316,13 +316,19 @@ The quickstart is in the README; every other setting is in section 12.
 Production is the same process serving the built SPA from `frontend/dist`.
 Migrations run at startup. The **monitoring scheduler autostarts inside the API
 process at boot** (controlled by `DREAMJOB_SCHEDULER_ENABLED`, with
-`DREAMJOB_SCHEDULER_AUTOSTART` as an override) and runs twelve tasks, vacancy refresh,
+`DREAMJOB_SCHEDULER_AUTOSTART` as an override) and runs thirteen tasks, vacancy refresh,
 job-alert e-mails, reply and bounce polling, watchlist rechecks, automatic company
 enrichment, continuous collection (idle until switched on in Admin), geolocation,
-follow-ups, outcome learning, the weekly digest, contact retention and LLM log
-redaction.
+follow-ups, outcome learning, the weekly digest, contact retention, LLM log
+redaction and the purge of stale unlinked vacancies.
 `--once` remains available from an external cron, and any task can be stopped,
 started or triggered from the monitoring screen.
+
+Before a pass the scheduler runs SQLite's `quick_check` (about 1.6 s on a 400 MB
+database; a pass is trusted for an hour inside the API loop). On a corrupt file
+no task runs, one CRITICAL line goes to the log, and `--once` exits with code 2,
+so Task Scheduler or cron shows a failed run. Without it, a corrupt database
+made every task fail on its own each pass while the run still exited 0.
 
 `scripts/browser.sh` launches a Chromium-based browser with a remote debugging
 port and a dedicated profile, for the collection steps that need a logged-in
@@ -397,9 +403,9 @@ profiled as if it were the client.
 
 ## 9. Testing
 
-**2,595 tests collected, 72,107 lines across 153 files** (`tests/**/*.py`;
-`-m 'not llm and not load'` deselects 14, leaving 2,581, of which the CI
-command's `tests/unit tests/integration` runs 2,547. The offline pass count is
+**2,602 tests collected, 72,267 lines across 154 files** (`tests/**/*.py`;
+`-m 'not llm and not load'` deselects 14, leaving 2,588, of which the CI
+command's `tests/unit tests/integration` runs 2,554. The offline pass count is
 in `README.md`).
 Each runs against a migrated temporary database and without network access; LLM
 and HTTP paths are stubbed or skipped, and the network and load tests are

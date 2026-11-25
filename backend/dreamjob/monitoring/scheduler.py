@@ -46,6 +46,12 @@ notification has ``dedup_key``, a digest has its period as a key).  A task
 that raises is logged and retried on its next tick; one broken task never
 stops the others.
 
+The exception is a corrupt database, which breaks every task at once.  A pass
+starts with SQLite's ``quick_check`` (:meth:`Scheduler.database_ok`); on a
+corrupt file nothing runs, the log gets one CRITICAL line, and ``--once``
+exits with ``EXIT_DATABASE_CORRUPT`` so the calling scheduler records a
+failure instead of a clean run.
+
 Running it for real
 -------------------
 
@@ -104,6 +110,7 @@ from dreamjob.config import get_settings
 from dreamjob.db.connection import (
     BULK,
     close_thread_connections,
+    database_health,
     query_all,
     query_one,
     utcnow,
@@ -122,6 +129,13 @@ TICK_SECONDS = 60
 #: Up to this much random delay before a task runs, so several tasks that come
 #: due together do not all hit SQLite in the same instant.
 JITTER_SECONDS = 20
+#: How long a passed database check is trusted before the loop runs it again.
+#: A failed check is never trusted: the next tick checks again, so the tasks
+#: resume on their own once the file has been repaired or restored.
+DB_CHECK_SECONDS = 3600
+#: Exit code of ``--once`` / ``--task`` when the database is corrupt, so a
+#: Task Scheduler or cron entry shows a failed run instead of "0".
+EXIT_DATABASE_CORRUPT = 2
 
 
 @dataclass
@@ -591,6 +605,10 @@ class Scheduler:
     _locks: dict[str, asyncio.Lock] = field(default_factory=dict)
     started_at: str | None = None
     runs: int = 0
+    #: When the database last passed ``quick_check``, and what the last failed
+    #: check said (``None`` while the file is sound).
+    db_checked_at: datetime | None = None
+    db_problem: str | None = None
 
     @property
     def running(self) -> bool:
@@ -634,9 +652,46 @@ class Scheduler:
             _record_run(task.name, None, error=str(exc)[:500])
             return {"error": str(exc)[:500]}
 
-    async def run_due(self, *, now: datetime | None = None) -> dict[str, Any]:
-        """Run every task whose interval has elapsed.  This is ``--once``."""
+    async def database_ok(self, now: datetime | None = None) -> bool:
+        """Check the database before a pass; log loudly and say no if it is corrupt.
+
+        Without this, a corrupt file shows up as every task failing on its own,
+        one traceback per task per pass, and the scheduled run still reports
+        success.  A sound result is trusted for ``DB_CHECK_SECONDS``; a broken
+        one is checked again on every tick so work resumes after a repair.
+        """
         moment = now or datetime.now(UTC)
+        if (
+            self.db_problem is None
+            and self.db_checked_at is not None
+            and moment - self.db_checked_at < timedelta(seconds=DB_CHECK_SECONDS)
+        ):
+            return True
+        problem = await asyncio.to_thread(database_health)
+        if problem is None:
+            if self.db_problem is not None:
+                log.warning("The database passes quick_check again; scheduler tasks resume")
+            self.db_problem = None
+            self.db_checked_at = moment
+            return True
+        if self.db_problem is None:
+            log.critical(
+                "The database is corrupt; no scheduler task will run until it is "
+                "repaired or restored. quick_check says:\n%s", problem,
+            )
+        self.db_problem = problem
+        return False
+
+    async def run_due(self, *, now: datetime | None = None) -> dict[str, Any]:
+        """Run every task whose interval has elapsed.  This is ``--once``.
+
+        Nothing runs on a database that fails ``quick_check``: the tasks would
+        each fail anyway, and the ones that write could make the damage worse.
+        """
+        moment = now or datetime.now(UTC)
+        if not await self.database_ok(moment):
+            self.runs += 1
+            return {"database": {"error": f"database is corrupt: {self.db_problem}"[:500]}}
         outcomes: dict[str, Any] = {}
         for task in self.tasks:
             try:
@@ -693,6 +748,10 @@ class Scheduler:
             "started_at": self.started_at,
             "ticks": self.runs,
             "tick_seconds": self.tick_seconds,
+            "database": {
+                "checked_at": self.db_checked_at.isoformat() if self.db_checked_at else None,
+                "problem": self.db_problem,
+            },
             "tasks": [
                 {
                     "name": t.name,
@@ -759,6 +818,11 @@ def main() -> None:  # pragma: no cover - the launchd / cron entry point
     )
 
     from dreamjob.db.migrator import migrate  # noqa: PLC0415 - stand-alone entry point
+
+    # Checked before ``migrate``, which writes, and so that a scheduled run on
+    # a corrupt file ends with a non-zero exit code the scheduler can show.
+    if not args.list and not asyncio.run(scheduler.database_ok()):
+        raise SystemExit(EXIT_DATABASE_CORRUPT)
 
     migrate()
 

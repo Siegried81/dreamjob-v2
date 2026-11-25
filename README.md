@@ -16,7 +16,7 @@ Specification v0.3.
 Dream Job started as [stepvda/dreamjob](https://github.com/stepvda/dreamjob).
 This repository is my own continuation, started from one snapshot (commit
 `422d760`, 2026-10-06), so its history begins there. The snapshot carried 2,193
-of the 2,547 tests the CI command runs today.
+of the 2,554 tests the CI command runs today.
 
 ## What I built here
 
@@ -101,10 +101,10 @@ unit tests refuse every host but loopback. A Playwright e2e harness lives under
 
 ## Key numbers
 
-2,532 of 2,547 tests pass offline, 15 skipped, none failing (the 15 need the
+2,539 of 2,554 tests pass offline, 15 skipped, none failing (the 15 need the
 gitignored personal export and CV; 9 more skip until `frontend/dist` is built).
-The run takes 9 to 15 minutes, depending on the machine. 247 Python modules (129,071 lines), 147 JS
-modules (45,057 lines), 153 test files (72,107 lines), 23 routers and 364 API
+The run takes 9 to 15 minutes, depending on the machine. 247 Python modules (129,166 lines), 147 JS
+modules (45,057 lines), 154 test files (72,267 lines), 23 routers and 364 API
 paths, 101 tables, 158 indexes, 46 migrations, 36 source adapters (30 enabled),
 24 versioned prompt templates, 21 help screens and 142 glossary terms. 156 of 157
 specification requirements are cited in the source (103/104 Must, 44/44 Should,
