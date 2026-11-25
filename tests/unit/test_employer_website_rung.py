@@ -517,6 +517,47 @@ def test_two_bad_answers_leave_the_company_cannot_tell_llm_failed():
     assert rung.RETRY_AFTER_DAYS["llm_failed"] == 3
 
 
+def test_a_request_too_large_is_sent_again_with_each_page_halved():
+    """Groq's 413 is about size, so the same model is asked again with less text."""
+    from dreamjob.llm.client import RequestTooLarge
+
+    pages = [page_from_fixture("forumjobs_be_home.html", "https://www.forumjobs.be/")]
+    good = answer("agency", 0.9, [
+        {"url": "https://www.forumjobs.be/", "supports": "agency",
+         "quote": "Ik zoek werk Voor bedrijven"},
+        {"url": "https://www.forumjobs.be/", "supports": "agency",
+         "quote": "bedrijven helpen aan hun krachtigste grondstof: mensen"},
+    ])
+    llm = StubLLM(RequestTooLarge("413"), good)
+
+    verdict = rung.classify_pages("FORUM JOBS NV", "forumjobs.be", pages, llm=llm)
+
+    assert verdict.kind == "agency"
+    assert [call["prefer_strong"] for call in llm.calls] == [False, False]
+    first, second = (len(call["untrusted"]["home"]) for call in llm.calls)
+    assert second < first
+    assert len(pages[0].text) == rung.HOME_TEXT_CHARS, "the pages as read are left whole"
+    assert verdict.attempts == 2
+
+
+def test_a_request_still_too_large_after_the_halvings_is_llm_failed():
+    from dreamjob.llm.client import RequestTooLarge
+
+    pages = [page_from_fixture("forumjobs_be_home.html", "https://www.forumjobs.be/")]
+    llm = StubLLM(*[RequestTooLarge("413")] * 10)
+
+    verdict = rung.classify_pages("FORUM JOBS NV", "forumjobs.be", pages, llm=llm)
+
+    assert verdict.kind == "cannot_tell"
+    assert verdict.reason == "llm_failed"
+    assert "RequestTooLarge" in verdict.detail
+    # One full try and MAX_SHRINKS halvings on the cheap model, then one more on
+    # the strong model with the text already at its smallest.
+    assert len(llm.calls) == rung.MAX_SHRINKS + 2
+    sizes = [len(call["untrusted"]["home"]) for call in llm.calls]
+    assert sizes[0] > sizes[1] > sizes[2] == sizes[3]
+
+
 # ---------------------------------------------------------------------------
 # NFR-205: the page is data, and an instruction inside it is never evidence
 # ---------------------------------------------------------------------------

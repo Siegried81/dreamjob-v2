@@ -49,7 +49,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
@@ -57,7 +57,7 @@ from urllib.parse import urlparse
 from dreamjob.adapters.website import crawler
 from dreamjob.config import get_settings
 from dreamjob.egress.client import EgressClient, RobotsDisallowed
-from dreamjob.llm.client import BudgetExhausted, LLMClient, LLMError
+from dreamjob.llm.client import BudgetExhausted, LLMClient, LLMError, RequestTooLarge
 from dreamjob.pipeline.apply_contacts import MIN_PAGE_TEXT, PARKING_MARKERS, strip_accents
 from dreamjob.pipeline.enrichment import load_prompt
 
@@ -89,6 +89,13 @@ PAGE_TEXT_CHARS = 4_000
 #: Call parameters as measured (section 3.3).
 TEMPERATURE = 0.1
 MAX_TOKENS = 900
+#: How many times a request refused for its size (HTTP 413) is sent again with
+#: every page's text halved.  Groq's free tier counts prompt plus ``max_tokens``
+#: against 8,000 tokens a minute.  Across 452 calls the prompt was 3,809 tokens
+#: at the median and 7,307 at most; the refused one asked for 8,669, on dense
+#: text at 2.7 characters a token rather than the usual 3.9.  The page text is
+#: most of the prompt, so one halving is normally enough and two leave room.
+MAX_SHRINKS = 2
 
 #: A rung-2 verdict is never certain: the site is the company talking about
 #: itself.  One surviving quote is weaker still.
@@ -831,6 +838,16 @@ def _untrusted_blocks(pages: list[PageRead]) -> dict[str, str]:
     return blocks
 
 
+def _halved(pages: list[PageRead]) -> list[PageRead]:
+    """The same pages with half of each text, for a request that was too large.
+
+    Each page keeps its head, which is where a site says what it is, and every
+    page stays in the prompt, so an employer-facing page is not dropped in
+    favour of the home page.
+    """
+    return [replace(page, text=page.text[: len(page.text) // 2]) for page in pages]
+
+
 def _model_name(llm: Any, prefer_strong: bool) -> str | None:
     """Which model actually answered, for the audit trail on the verdict row."""
     try:
@@ -875,40 +892,54 @@ def classify_pages(
 
     template = load_prompt(PROMPT_NAME)
     system, user = template.render(company_name=company_name, domain=domain)
-    blocks = _untrusted_blocks(pages)
     fields |= dict(prompt_template=template.name, prompt_version=template.version)
 
     attempts = 0
+    shrinks = 0
+    # What the model is shown, and so what its quotes are checked against: the
+    # pages as read, or a halved copy once the provider refused their size.
+    shown = pages
     last_error: Exception | None = None
     # Rule 5 of section 3.4: an answer that is not the shape the prompt asked
     # for is retried once on the strong model, then left cannot_tell.
     for prefer_strong in (False, True):
-        attempts += 1
-        try:
-            payload = llm.complete_json(
-                LLM_TASK,
-                system=system,
-                user=user,
-                untrusted=blocks,
-                prefer_strong=prefer_strong,
-                temperature=TEMPERATURE,
-                max_tokens=MAX_TOKENS,
-                entity_type="company",
-                entity_id=company_id,
-                prompt_template=template.name,
-                prompt_version=template.version,
-            )
-            verdict = validate_response(payload, pages, **fields)
-            verdict.attempts = attempts
-            verdict.model = _model_name(llm, prefer_strong)
-            return verdict
-        except BudgetExhausted as exc:  # NFR-104: degrade, do not guess
-            return cannot_tell("llm_failed", detail=f"token budget exhausted: {exc}"[:200],
-                               attempts=attempts, **fields)
-        except LLMError as exc:
-            last_error = exc
-            log.info("employer_kind: %s answered badly for %s (%s)",
-                     "strong model" if prefer_strong else "cheap model", domain, exc)
+        while True:
+            attempts += 1
+            try:
+                payload = llm.complete_json(
+                    LLM_TASK,
+                    system=system,
+                    user=user,
+                    untrusted=_untrusted_blocks(shown),
+                    prefer_strong=prefer_strong,
+                    temperature=TEMPERATURE,
+                    max_tokens=MAX_TOKENS,
+                    entity_type="company",
+                    entity_id=company_id,
+                    prompt_template=template.name,
+                    prompt_version=template.version,
+                )
+                verdict = validate_response(payload, shown, **fields)
+                verdict.attempts = attempts
+                verdict.model = _model_name(llm, prefer_strong)
+                return verdict
+            except BudgetExhausted as exc:  # NFR-104: degrade, do not guess
+                return cannot_tell("llm_failed", detail=f"token budget exhausted: {exc}"[:200],
+                                   attempts=attempts, **fields)
+            except RequestTooLarge as exc:
+                # Too big for the provider, whatever the model: send less.
+                last_error = exc
+                if shrinks >= MAX_SHRINKS:
+                    break
+                shrinks += 1
+                shown = _halved(shown)
+                log.info("employer_kind: request too large for %s; retrying with page text "
+                         "halved (%d of %d)", domain, shrinks, MAX_SHRINKS)
+            except LLMError as exc:
+                last_error = exc
+                log.info("employer_kind: %s answered badly for %s (%s)",
+                         "strong model" if prefer_strong else "cheap model", domain, exc)
+                break
 
     return cannot_tell("llm_failed", detail=f"{type(last_error).__name__}: {last_error}"[:200],
                        attempts=attempts, **fields)
