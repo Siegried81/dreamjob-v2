@@ -68,8 +68,8 @@ of taking those constraints seriously rather than working around them.
 ```
 
 **Scale** (`backend/**/*.py`, `frontend/**/*.{js,jsx}`, `tests/**/*.py`).
-247 Python modules / 129,062 lines · 147 JS modules / 45,057 lines · 153 test
-files / 72,074 lines · 46 migrations · 24 versioned prompt templates · 36
+247 Python modules / 129,071 lines · 147 JS modules / 45,057 lines · 153 test
+files / 72,107 lines · 46 migrations · 24 versioned prompt templates · 36
 declared source adapters, 30 of them enabled. The offline pass count is in
 `README.md`. Lines are counted with `git ls-files 'backend/*.py' | xargs cat | wc -l`,
 and the same with `frontend/*.js frontend/*.jsx` and `tests/*.py`.
@@ -397,9 +397,9 @@ profiled as if it were the client.
 
 ## 9. Testing
 
-**2,586 tests collected, 72,074 lines across 153 files** (`tests/**/*.py`;
-`-m 'not llm and not load'` deselects 14, leaving 2,572, of which the CI
-command's `tests/unit tests/integration` runs 2,538. The offline pass count is
+**2,595 tests collected, 72,107 lines across 153 files** (`tests/**/*.py`;
+`-m 'not llm and not load'` deselects 14, leaving 2,581, of which the CI
+command's `tests/unit tests/integration` runs 2,547. The offline pass count is
 in `README.md`).
 Each runs against a migrated temporary database and without network access; LLM
 and HTTP paths are stubbed or skipped, and the network and load tests are
