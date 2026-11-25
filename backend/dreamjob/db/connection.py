@@ -404,6 +404,37 @@ def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
     return conn
 
 
+def database_health(db_path: Path | None = None, max_errors: int = 5) -> str | None:
+    """Run SQLite's ``quick_check``; ``None`` when the file is sound, else what is wrong.
+
+    A corrupt database does not stop a caller that only catches errors per
+    task: every task fails, each failure is logged and retried, and nothing
+    tells the person that the whole store is gone.  That is how a scheduled
+    pass kept failing every hour for a day without anybody seeing it.  This
+    check lets the scheduler refuse to run on a broken file and say so once.
+
+    It opens its own read-only connection rather than the thread's: the shared
+    connection's setup issues ``PRAGMA journal_mode=WAL``, which is itself one
+    of the statements a corrupt file refuses.  ``quick_check`` skips the
+    index-to-table cross-check that ``integrity_check`` does, which keeps it at
+    about 1.6 s on a 400 MB database, cheap enough for every scheduled pass.
+    A file that does not exist yet is not corrupt: the migrator creates it.
+    """
+    path = db_path or get_settings().abs_db_path
+    if not path.exists():
+        return None
+    try:
+        conn = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+        try:
+            rows = conn.execute(f"PRAGMA quick_check({int(max_errors)})").fetchall()
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError as exc:
+        return str(exc)
+    lines = [str(r[0]) for r in rows]
+    return None if lines == ["ok"] else "\n".join(lines)
+
+
 def checkpoint(mode: str = "PASSIVE") -> dict[str, int]:
     """Collapse the write-ahead log back into the database.
 
