@@ -180,6 +180,33 @@ def reasoning_switch(base_url: str, model: str, strong: bool) -> str | None:
 _BUDGET_ERROR_CODE = "json_validate_failed"
 #: The ceiling when a call that ran out of budget is retried with a larger one.
 _BUDGET_RETRY_MAX_TOKENS = 8192
+#: The longest wait honoured when every key is rate limited.  Groq's per-minute
+#: windows ask for 30 to 40 s; the old fixed backoff (2 s, then 4 s) retried
+#: well inside the window and turned each 429 into a failed call.
+_RATE_LIMIT_WAIT_MAX = 60.0
+_TRY_AGAIN_RE = re.compile(r"try again in (?:(\d+)m)?([\d.]+)(ms|s)\b", re.IGNORECASE)
+
+
+def retry_after_seconds(resp: Any) -> float | None:
+    """How long a 429 asks the caller to wait, from the header or Groq's message.
+
+    ``retry-after`` is read first (seconds); Groq also writes "Please try again
+    in 33.78s" (or "1m2.5s", or "450ms") into the error message, which is used
+    when the header is missing.  ``None`` when neither says.
+    """
+    headers = getattr(resp, "headers", None) or {}
+    try:
+        value = headers.get("retry-after")
+        if value is not None:
+            return max(0.0, float(value))
+    except (TypeError, ValueError):
+        pass
+    match = _TRY_AGAIN_RE.search(str(getattr(resp, "text", "") or ""))
+    if not match:
+        return None
+    minutes, amount, unit = match.groups()
+    seconds = float(amount) / (1000.0 if unit.lower() == "ms" else 1.0)
+    return seconds + 60.0 * int(minutes or 0)
 
 
 def error_detail(resp: Any) -> str:
@@ -256,6 +283,16 @@ class TruncatedResponse(LLMError):
 
 class BudgetExhausted(LLMError):
     """Raised when a campaign's token budget (NFR-104) would be exceeded."""
+
+
+class RequestTooLarge(LLMError):
+    """The provider refused the request for its size (HTTP 413).
+
+    On Groq's free tier this is the tokens-per-minute ceiling: the prompt plus
+    ``max_tokens`` is counted against 8,000 a minute, so one request bigger
+    than that can never pass, on any key, at any moment.  Sending it again
+    unchanged only burns the retries; the caller has to send less.
+    """
 
 
 @dataclass
@@ -809,8 +846,26 @@ class LLMClient:
                                 },
                                 json=payload,
                             )
+                    if resp.status_code == 413:
+                        # The same request is refused the same way every time,
+                        # so it is neither retried nor sent with another key.
+                        last_detail = error_detail(resp)
+                        last_error = RequestTooLarge(
+                            f"Request too large for {model} at {base_url} (HTTP 413)"
+                        )
+                        break
                     if resp.status_code in (429, 500, 502, 503, 504) and attempt < retries:
-                        time.sleep(2 ** attempt * 2)
+                        wait = 2 ** attempt * 2
+                        if resp.status_code == 429:
+                            # Every key was refused: wait for the window the
+                            # provider names, not just the short backoff.
+                            asked = retry_after_seconds(resp) or 0.0
+                            wait = min(max(wait, asked), _RATE_LIMIT_WAIT_MAX)
+                            log.info(
+                                "LLM task %r rate limited on every key at %s; waiting %.1fs",
+                                task, base_url, wait,
+                            )
+                        time.sleep(wait)
                         continue
                     if resp.status_code >= 400:
                         last_detail = error_detail(resp)
@@ -836,14 +891,18 @@ class LLMClient:
                 "LLM endpoint %s failed for task %r: %s %s", base_url, task, last_error, last_detail
             )
         if data is None:
+            # The stored error carries the provider's status, code and body as
+            # well as the exception: httpx's own message names the status only,
+            # so a 429 and a 413 were indistinguishable in the call log, and the
+            # wait Groq asked for was lost.
+            failure = f"{last_error} {last_detail}".rstrip()
             self._log_call(
                 task, system, user, "", model, provider, Usage(), entity_type, entity_id,
                 prompt_template, prompt_version, int((time.monotonic() - started) * 1000),
-                status="error", error=str(last_error),
+                status="error", error=failure,
             )
-            raise LLMError(
-                f"LLM call failed for task {task!r}: {last_error} {last_detail}".rstrip()
-            ) from last_error
+            error_class = RequestTooLarge if isinstance(last_error, RequestTooLarge) else LLMError
+            raise error_class(f"LLM call failed for task {task!r}: {failure}") from last_error
 
         choice = data["choices"][0]
         text = (choice["message"].get("content") or "").strip()

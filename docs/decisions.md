@@ -253,3 +253,26 @@ reads EPS by calling Ghostscript when one is installed, and Upload2Shell
 come from arbitrary web pages. No machine or image here has Ghostscript today.
 A photo in any other format gives no photo signal, as an undecodable one already
 did. Revisit if a real portrait turns up in a format outside the list.
+
+## 2026-11-25: Groq's 413 and 429 no longer end in `llm_failed`
+
+The employer run of 23/11 left 64 companies at `cannot_tell` / `llm_failed`:
+142 calls refused with `429` and 2 with `413`. Three changes in `llm/client.py`
+and the website rung:
+
+- A `413` is Groq's tokens-per-minute ceiling (8,000 on the free tier, prompt
+  plus `max_tokens`), so the same request fails on every key and every retry.
+  The client now raises `RequestTooLarge` at once instead of retrying it, and
+  `classify_pages` sends the request again with every page's text halved, at
+  most twice (`MAX_SHRINKS`). This changes what the model reads for those
+  companies: the head of each page rather than the whole capped text, and the
+  quotes are checked against that shorter text. Across 452 successful calls
+  the prompt was 3,809 tokens at the median and 7,307 at most; the refused one
+  asked for 8,669 (prompt plus the 900 of `max_tokens`), on dense text at
+  2.7 characters a token against the usual 3.9.
+- A `429` on every key now waits for the window Groq names (`retry-after`, or
+  "try again in 33.78s" in the message), capped at 60 s, instead of the fixed
+  2 s then 4 s backoff that retried inside the window.
+- `llm_call.error` stores the provider's status, code and body slice next to
+  the exception. It held httpx's one line before ("429 Too Many Requests"), so
+  the 156 stored employer-kind errors could not tell a 429 from a 413.

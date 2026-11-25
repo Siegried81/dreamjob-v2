@@ -403,9 +403,9 @@ profiled as if it were the client.
 
 ## 9. Testing
 
-**2,602 tests collected, 72,267 lines across 154 files** (`tests/**/*.py`;
-`-m 'not llm and not load'` deselects 14, leaving 2,588, of which the CI
-command's `tests/unit tests/integration` runs 2,554. The offline pass count is
+**2,613 tests collected, 72,466 lines across 155 files** (`tests/**/*.py`;
+`-m 'not llm and not load'` deselects 14, leaving 2,599, of which the CI
+command's `tests/unit tests/integration` runs 2,565. The offline pass count is
 in `README.md`).
 Each runs against a migrated temporary database and without network access; LLM
 and HTTP paths are stubbed or skipped, and the network and load tests are
